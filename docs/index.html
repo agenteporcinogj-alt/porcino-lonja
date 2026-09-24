@@ -28,8 +28,9 @@ body{margin:0;background:var(--ground);color:var(--ink);font-family:"IBM Plex Sa
 .lock input{width:100%;padding:13px 44px;border-radius:10px;border:1px solid var(--line);background:var(--surface2);
   color:var(--ink);font-size:1rem;font-family:"IBM Plex Mono",monospace;text-align:center}
 .lock input:focus{outline:2px solid var(--accent)}
-.lock .eye{position:absolute;right:6px;top:50%;transform:translateY(-50%);width:auto;margin:0;padding:6px 8px;
-  background:none;border:0;color:var(--muted);font-size:1.15rem;cursor:pointer}
+.lock .eye{position:absolute;right:6px;top:50%;transform:translateY(-50%);width:auto;margin:0;padding:6px;
+  background:none;border:0;color:var(--muted);cursor:pointer;display:flex;align-items:center;justify-content:center}
+.lock .eye svg{display:block}
 .lock button{margin-top:12px;width:100%;padding:13px;border:0;border-radius:10px;background:var(--accent);color:#fff;
   font-weight:600;font-size:1rem;cursor:pointer;font-family:inherit}
 .lock .err{color:var(--bad);font-size:.85rem;margin-top:10px;min-height:1em}
@@ -74,7 +75,7 @@ footer a{color:var(--accent);cursor:pointer}
     <p>Panel privado. Introduce la contraseña.</p>
     <div class="pwwrap">
       <input id="pw" type="password" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="contraseña" autofocus>
-      <button id="eye" class="eye" type="button" aria-label="Mostrar/ocultar">👁</button>
+      <button id="eye" class="eye" type="button" aria-label="Mostrar u ocultar contraseña"></button>
     </div>
     <button id="go">Entrar</button>
     <div class="err" id="err"></div>
@@ -167,7 +168,10 @@ async function tryUnlock(pw,fromStore){
 }
 $('go').onclick=()=>tryUnlock($('pw').value.trim(),false);
 $('pw').addEventListener('keydown',e=>{if(e.key==='Enter')$('go').click();});
-$('eye').onclick=()=>{const p=$('pw');const show=p.type==='password';p.type=show?'text':'password';$('eye').textContent=show?'🙈':'👁️';p.focus();};
+const EYE_OPEN='<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1.5 12S5.5 5 12 5s10.5 7 10.5 7-4 7-10.5 7S1.5 12 1.5 12z"/><circle cx="12" cy="12" r="3"/></svg>';
+const EYE_OFF='<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1.5 12S5.5 5 12 5s10.5 7 10.5 7-4 7-10.5 7S1.5 12 1.5 12z"/><circle cx="12" cy="12" r="3"/><line x1="3" y1="21" x2="21" y2="3" stroke="#E63A2E" stroke-width="2.6"/></svg>';
+$('eye').innerHTML=EYE_OFF;
+$('eye').onclick=()=>{const p=$('pw');const show=p.type==='password';p.type=show?'text':'password';$('eye').innerHTML=show?EYE_OPEN:EYE_OFF;p.focus();};
 $('logout').onclick=()=>{try{localStorage.removeItem('pw');}catch(e){}location.reload();};
 window.addEventListener('resize',()=>{if(!$('app').hidden&&window.__d)drawChart(window.__d.serie);});
 // auto-unlock si ya la metió antes en este móvil
