@@ -1,0 +1,5 @@
+_pdfs/
+__pycache__/
+*.env
+*token*
+.DS_Store

@@ -1,0 +1,29 @@
+name: pipeline diario
+on:
+  schedule:
+    - cron: '0 6 * * *'
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install -r requirements.txt
+      - name: Ejecutar pipeline
+        env:
+          GMAIL_USER: ${{ secrets.GMAIL_USER }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+          WEB_PASSWORD: ${{ secrets.WEB_PASSWORD }}
+        run: python pipeline.py
+      - name: Guardar resultados
+        run: |
+          git config user.name "porcino-bot"
+          git config user.email "bot@users.noreply.github.com"
+          git add data/master.xlsx data/validacion_modelo.csv docs/data.enc.js
+          git commit -m "Actualizacion automatica $(date +%F)" || echo "sin cambios"
+          git push

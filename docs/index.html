@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Precio del cerdo · Lleida</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Spectral:wght@400;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+:root{--ground:#15130F;--surface:#1E1B16;--surface2:#232019;--ink:#F0EBE2;--muted:#A79F92;
+  --line:#332F27;--accent:#E4675A;--accent-soft:#E4675A22;--good:#2CBE92;--bad:#E4675A;}
+*{box-sizing:border-box}
+body{margin:0;background:var(--ground);color:var(--ink);font-family:"IBM Plex Sans",system-ui,sans-serif;
+  -webkit-font-smoothing:antialiased;line-height:1.5;padding:env(safe-area-inset-top) 0 40px}
+.wrap{max-width:640px;margin:0 auto;padding:0 16px;padding-block:24px}
+.mono{font-family:"IBM Plex Mono",monospace}
+.tnum{font-variant-numeric:tabular-nums}
+
+/* gate */
+#gate{position:fixed;inset:0;background:var(--ground);display:flex;align-items:center;justify-content:center;padding:20px;z-index:10}
+.lock{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:30px 24px;max-width:360px;width:100%;text-align:center}
+.lock .emoji{font-size:2.6rem}
+.lock h1{font-family:"Spectral",serif;font-size:1.4rem;margin:12px 0 4px}
+.lock p{color:var(--muted);font-size:.9rem;margin:0 0 18px}
+.lock input{width:100%;padding:13px 14px;border-radius:10px;border:1px solid var(--line);background:var(--surface2);
+  color:var(--ink);font-size:1rem;font-family:"IBM Plex Mono",monospace;text-align:center}
+.lock input:focus{outline:2px solid var(--accent)}
+.lock button{margin-top:12px;width:100%;padding:13px;border:0;border-radius:10px;background:var(--accent);color:#fff;
+  font-weight:600;font-size:1rem;cursor:pointer;font-family:inherit}
+.lock .err{color:var(--bad);font-size:.85rem;margin-top:10px;min-height:1em}
+
+header .eyebrow{font-family:"IBM Plex Mono",monospace;font-size:.68rem;letter-spacing:.16em;text-transform:uppercase;color:var(--accent);font-weight:600;margin:0}
+header h1{font-family:"Spectral",serif;font-size:1.7rem;margin:6px 0 2px;letter-spacing:-.01em}
+header .sub{color:var(--muted);font-size:.82rem;font-family:"IBM Plex Mono",monospace}
+
+.hero{background:linear-gradient(180deg,var(--accent-soft),transparent),var(--surface);border:1px solid var(--accent);
+  border-radius:16px;padding:22px;margin:20px 0;text-align:center}
+.hero .lbl{font-size:.8rem;color:var(--muted);letter-spacing:.03em}
+.hero .val{font-family:"Spectral",serif;font-weight:700;font-size:3.4rem;line-height:1;margin:6px 0}
+.hero .val small{font-size:1.4rem;color:var(--muted)}
+.hero .note{font-size:.82rem;color:var(--muted)}
+
+.row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:15px}
+.card .k{font-size:.72rem;color:var(--muted)}
+.card .v{font-family:"Spectral",serif;font-weight:700;font-size:1.5rem;line-height:1.1;margin-top:2px}
+.card .u{font-size:.72rem;color:var(--muted);font-family:"IBM Plex Mono",monospace}
+
+h2{font-family:"Spectral",serif;font-size:1.15rem;margin:26px 0 10px}
+.chartcard{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:16px 12px 8px}
+svg{width:100%;height:auto;display:block}
+svg text{font-family:"IBM Plex Mono",monospace}
+
+table{width:100%;border-collapse:collapse;font-size:.9rem}
+th,td{padding:9px 6px;text-align:right;border-bottom:1px solid var(--line)}
+th{color:var(--muted);font-weight:500;font-size:.74rem;text-transform:uppercase;letter-spacing:.04em}
+td:first-child,th:first-child{text-align:left}
+.hit{color:var(--good);font-weight:600}.miss{color:var(--muted)}
+.pend{color:var(--muted);font-style:italic}
+footer{margin-top:26px;text-align:center;color:var(--muted);font-size:.72rem;font-family:"IBM Plex Mono",monospace}
+footer a{color:var(--accent);cursor:pointer}
+</style>
+</head>
+<body>
+<div id="gate">
+  <div class="lock">
+    <div class="emoji">🐷🔒</div>
+    <h1>Precio del cerdo · Lleida</h1>
+    <p>Panel privado. Introduce la contraseña.</p>
+    <input id="pw" type="password" inputmode="text" autocomplete="off" placeholder="contraseña" autofocus>
+    <button id="go">Entrar</button>
+    <div class="err" id="err"></div>
+  </div>
+</div>
+
+<div class="wrap" id="app" hidden>
+  <header>
+    <p class="eyebrow">Grupo Jorge · Modelo de predicción</p>
+    <h1>Precio del cerdo · Lonja de Lleida</h1>
+    <div class="sub" id="gen"></div>
+  </header>
+
+  <div class="hero">
+    <div class="lbl">Predicción para la <span id="predw"></span></div>
+    <div class="val"><span id="predv"></span> <small>€/kg</small></div>
+    <div class="note" id="prednote"></div>
+  </div>
+
+  <div class="row">
+    <div class="card"><div class="k">Último dato real</div><div class="v tnum"><span id="lastv"></span> €</div><div class="u" id="lastw"></div></div>
+    <div class="card"><div class="k">Precisión del modelo</div><div class="v tnum"><span id="prec"></span> cts</div><div class="u">error medio (vs <span id="naive"></span> lo simple)</div></div>
+  </div>
+
+  <h2>Evolución reciente</h2>
+  <div class="chartcard"><div id="chart"></div></div>
+
+  <h2>Predicción vs real (aciertos)</h2>
+  <div class="chartcard" style="padding:6px 12px">
+    <table><thead><tr><th>Semana</th><th>Predicción</th><th>Real</th><th>Error</th></tr></thead>
+    <tbody id="hist"></tbody></table>
+  </div>
+
+  <footer>Datos: Mercolleida · Actualización automática diaria · <a id="logout">cerrar sesión</a></footer>
+</div>
+
+<script src="data.enc.js"></script>
+<script>
+const $=id=>document.getElementById(id);
+const fmt=(v,d=2)=>Number(v).toLocaleString('es-ES',{minimumFractionDigits:d,maximumFractionDigits:d});
+async function decryptData(b64,password){
+  const raw=Uint8Array.from(atob(b64),c=>c.charCodeAt(0));
+  const salt=raw.slice(0,16),iv=raw.slice(16,28),data=raw.slice(28);
+  const km=await crypto.subtle.importKey('raw',new TextEncoder().encode(password),'PBKDF2',false,['deriveKey']);
+  const key=await crypto.subtle.deriveKey({name:'PBKDF2',salt,iterations:200000,hash:'SHA-256'},km,{name:'AES-GCM',length:256},false,['decrypt']);
+  const plain=await crypto.subtle.decrypt({name:'AES-GCM',iv},key,data);
+  return JSON.parse(new TextDecoder().decode(plain));
+}
+function render(d){
+  window.__d=d;
+  $('gate').hidden=true; $('app').hidden=false;
+  $('gen').textContent='Actualizado '+d.generado;
+  $('predw').textContent='semana '+d.prediccion.w+' de '+d.prediccion.y;
+  $('predv').textContent=fmt(d.prediccion.v);
+  $('prednote').textContent='Estimación a 1 semana vista (modelo v1)';
+  $('lastv').textContent=fmt(d.ultimo.v); $('lastw').textContent='semana '+d.ultimo.w+' · '+d.ultimo.y;
+  $('prec').textContent=fmt(d.precision.modelo_cts,1); $('naive').textContent=fmt(d.precision.naive_cts,1);
+  // tabla historial (ultimas 10, mas recientes arriba)
+  const rows=d.historial.slice(-10).reverse().map(r=>{
+    let real='<span class="pend">pendiente</span>',err='—';
+    if(r.real){real=fmt(r.real)+' €';const e=parseFloat(r.error);err='<span class="'+(e<=2?'hit':'miss')+'">'+r.error+' cts</span>';}
+    return `<tr><td>sem ${r.semana}</td><td>${fmt(r.pred)} €</td><td>${real}</td><td>${err}</td></tr>`;
+  }).join('');
+  $('hist').innerHTML=rows;
+  drawChart(d.serie);
+}
+function drawChart(serie){
+  const host=$('chart');const W=host.clientWidth||560,H=200,mL=34,mR=10,mT=12,mB=20;
+  const vs=serie.map(p=>p.v);const vmin=Math.min(...vs)-0.05,vmax=Math.max(...vs)+0.05;
+  const N=serie.length;const X=i=>mL+(i/(N-1))*(W-mL-mR);const Y=v=>mT+(1-(v-vmin)/(vmax-vmin))*(H-mT-mB);
+  let g='';const ns='http://www.w3.org/2000/svg';
+  const svg=`<svg viewBox="0 0 ${W} ${H}">`;
+  let grid='';for(let k=0;k<=2;k++){const v=vmin+ (vmax-vmin)*k/2;const y=Y(v);
+    grid+=`<line x1="${mL}" y1="${y}" x2="${W-mR}" y2="${y}" stroke="var(--line)"/>`+
+          `<text x="${mL-6}" y="${y+3}" text-anchor="end" font-size="9" fill="var(--muted)">${fmt(v)}</text>`;}
+  let d='';serie.forEach((p,i)=>{d+=(i?'L':'M')+X(i).toFixed(1)+' '+Y(p.v).toFixed(1);});
+  let yr='';serie.forEach((p,i)=>{if(p.w===1){const x=X(i);yr+=`<text x="${x}" y="${H-6}" text-anchor="middle" font-size="9" fill="var(--muted)">${p.y}</text>`;}});
+  const last=serie[N-1];
+  host.innerHTML=svg+grid+yr+`<path d="${d}" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linejoin="round"/>`+
+    `<circle cx="${X(N-1)}" cy="${Y(last.v)}" r="3.5" fill="var(--accent)"/>`+`</svg>`;
+}
+async function tryUnlock(pw,fromStore){
+  try{
+    const d=await decryptData(window.ENC,pw);
+    try{localStorage.setItem('pw',pw);}catch(e){}
+    render(d);
+  }catch(e){
+    if(!fromStore){$('err').textContent='Contraseña incorrecta';}
+  }
+}
+$('go').onclick=()=>tryUnlock($('pw').value,false);
+$('pw').addEventListener('keydown',e=>{if(e.key==='Enter')$('go').click();});
+$('logout').onclick=()=>{try{localStorage.removeItem('pw');}catch(e){}location.reload();};
+window.addEventListener('resize',()=>{if(!$('app').hidden&&window.__d)drawChart(window.__d.serie);});
+// auto-unlock si ya la metió antes en este móvil
+(async()=>{let saved=null;try{saved=localStorage.getItem('pw');}catch(e){}
+  if(saved&&window.ENC){try{const d=await decryptData(window.ENC,saved);window.__d=d;render(d);}catch(e){}}})();
+</script>
+</body>
+</html>
