@@ -56,10 +56,16 @@ def index_files(pfx):
         if yw and yw[0]==2026 and yw[1] not in out: out[yw[1]]=f
     return out
 def esp_de_po(path):
+    # Objetivo = precio REAL de la Lonja de Lleida ("Cerdo Blanco", valor de esta semana).
     try:
         with pdfplumber.open(path) as pdf: allt='\n'.join((p.extract_text() or '') for p in pdf.pages)
     except: return None
     for l in allt.split('\n'):
+        s=l.strip().lower()
+        if s.startswith('cerdo blanco') or s.startswith('cerdo cebado'):
+            ns=NUM.findall(l)
+            if len(ns)>=2: return tf(ns[1])
+    for l in allt.split('\n'):  # fallback: equivalente España
         if l.strip().startswith('España'):
             ns=NUM.findall(l)
             if len(ns)>=12: return tf(ns[6])
