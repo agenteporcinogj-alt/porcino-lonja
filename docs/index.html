@@ -251,8 +251,8 @@ footer a{color:var(--accent);cursor:pointer}
   <section class="rise">
     <h2>Cuánto vale acertar</h2>
     <div class="panel imp">
-      <div class="big">10.000 €</div>
-      <p>Es lo que vale <b>cada céntimo/kg</b> que aciertes, por cada <b>1.000 toneladas</b> que se muevan esa semana. Ajusta al volumen real de Grupo Jorge y ves el dinero en juego.</p>
+      <div class="big">~66.000 € / semana</div>
+      <p>Es lo que vale <b>cada céntimo/kg</b> para Grupo Jorge: <b>55.000 cerdos × 120 kg</b>. Al año, cada céntimo son <b>~3,3 millones €</b>. Por eso afinar cuándo vender pesa tanto — y por eso este modelo tiene sentido.</p>
     </div>
   </section>
 
@@ -394,7 +394,7 @@ const A={
  fecha:()=>'Hoy estamos en la <b>semana '+isoWeek(new Date())+'</b> del año. La predicción es para la <b>semana '+D.prediccion.w+'</b>, que va del <b>'+weekRange(D.prediccion.y,D.prediccion.w)+'</b>.',
  largo:()=>'Sincero: el modelo está afinado para <b>1 semana</b> (ahí acierta a céntimos). A meses o un año <b>no hay una cifra fiable</b> — depende demasiado de la PPA, China y el pienso. Lo que sí sé por el patrón: espera el <b>bajón de enero</b> y el <b>pico de verano</b>, y ahora mismo venimos de recuperación tras el desplome de 2025. Para el largo plazo, mira los <b>escenarios</b>.',
  funciona:()=>'Miro el precio de las últimas semanas de España, cómo se han movido <b>Francia y Alemania</b> (que van 1 semana por delante) y la <b>estacionalidad</b>, y con eso estimo la semana que viene. Empecé simple (medias móviles) y se irá metiendo más (PPA, China, pienso). <span class="mini">Todo con datos de Mercolleida.</span>',
- impacto:()=>'Cada <b>céntimo/kg</b> que aciertes vale <b>10.000 €</b> por cada <b>1.000 toneladas</b> que se muevan esa semana. Ajusta al volumen real de Grupo Jorge y ves el dinero en juego en cada decisión de venta.',
+ impacto:()=>{const eur=Math.round(Math.abs(D.delta_cts)*66);return 'Cada <b>céntimo/kg</b> vale <b>~66.000 €/semana</b> para Grupo Jorge (55.000 cerdos × 120 kg) y ~3,3 millones al año. Esta semana el modelo prevé mover <b>'+fmt(Math.abs(D.delta_cts),1)+' cts</b> → unos <b>'+eur.toLocaleString('es-ES')+'.000 €</b> en juego en la decisión de venta.';},
  historico:()=>'En el histórico, el máximo fue <b>~2,03 €</b> (abril 2023, guerra de Ucrania + poca oferta) y el mínimo <b>~0,94 €</b> (2016, exceso de carne + veto ruso). El desplome de finales de 2025 fue por la <b>PPA + aranceles de China</b>.',
  cerdoblanco:()=>'El <b>"Cerdo Blanco"</b> es la cotización oficial de la Lonja de Lleida (€/kg vivo) — el precio que mira todo el sector y tu padre. Es el número que predice el modelo. El "equivalente" es otra cifra ajustada para comparar países; no es la que se usa aquí.',
  tendencia:()=>{const d=D.delta_cts;return 'El modelo ve el precio '+(d>0?'<b>subiendo</b>':d<0?'<b>bajando</b>':'<b>plano</b>')+' esta semana ('+scts(d)+'). Del último real ('+fmt(D.ultimo.v,3)+' €) a la predicción ('+fmt(D.prediccion.v,3)+' €).';},
