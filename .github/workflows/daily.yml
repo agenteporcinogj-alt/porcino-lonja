@@ -1,7 +1,7 @@
 name: pipeline diario
 on:
   schedule:
-    - cron: '0 6 * * 1-5'
+    - cron: '0 7,12,17 * * 1-5'
   workflow_dispatch:
 permissions:
   contents: write
