@@ -471,7 +471,13 @@ $('go').onclick=()=>tryUnlock($('pw').value.trim(),false);
 $('pw').addEventListener('keydown',e=>{if(e.key==='Enter')$('go').click();});
 $('logout').onclick=()=>{try{localStorage.removeItem('pw');}catch(e){}location.reload();};
 window.addEventListener('resize',()=>{if(D){drawChart(D.serie);drawComov(D.serie_paises);}});
-(async()=>{let saved=null;try{saved=localStorage.getItem('pw');}catch(e){}if(saved&&window.ENC){try{const d=await decryptData(window.ENC,saved);render(d);}catch(e){}}})();
+async function boot(){
+  // pilla SIEMPRE la versión fresca (salta caché del navegador y de GitHub)
+  try{const t=await fetch('data.enc.js?cb='+Date.now(),{cache:'no-store'}).then(r=>r.text());const m=t.match(/"([^"]+)"/);if(m)window.ENC=m[1];}catch(e){}
+  let saved=null;try{saved=localStorage.getItem('pw');}catch(e){}
+  if(saved&&window.ENC){try{const d=await decryptData(window.ENC,saved);render(d);}catch(e){}}
+}
+boot();
 </script>
 </body>
 </html>
