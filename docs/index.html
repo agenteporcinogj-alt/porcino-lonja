@@ -341,7 +341,7 @@ function renderEvt(d){
 function renderHist(d){
   $('hist').innerHTML=d.historial.slice(-12).reverse().map(r=>{
     let real='<span class="pend">pendiente</span>',err='—';
-    if(r.real){real=fmt(r.real,3)+' €';const e=parseFloat(r.error);err='<span class="'+(e<=2?'hit':'')+'">'+r.error+' cts</span>';}
+    if(r.real){real=fmt(r.real,3)+' €';const e=parseFloat(r.error);err='<span class="'+(e<=2?'hit':'')+'">'+String(r.error).replace('.',',')+' cts</span>';}
     return '<tr><td>sem '+r.semana+'</td><td>'+fmt(r.pred,3)+' €</td><td>'+real+'</td><td>'+err+'</td></tr>';
   }).join('');
 }

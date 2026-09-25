@@ -214,9 +214,10 @@ def cifrar(plaintext,password):
     return base64.b64encode(salt+iv+ct).decode()
 def paso_web(m,historial):
     delta=m['delta_cts']; base=m['pred']
-    if delta>=1.0: sem={'estado':'AGUANTA','color':'verde','txt':'El precio va a SUBIR ~%.1f cts la semana que viene. Si puedes, aguanta la venta.'%delta}
-    elif delta<=-1.0: sem={'estado':'VENDE','color':'rojo','txt':'El precio va a BAJAR ~%.1f cts la semana que viene. Vender ahora protege margen.'%abs(delta)}
-    else: sem={'estado':'ESTABLE','color':'ambar','txt':'Precio estable (±%.1f cts). Sin presión para adelantar ni retrasar ventas.'%abs(delta)}
+    c1=lambda x:('%.1f'%x).replace('.',',')
+    if delta>=1.0: sem={'estado':'AGUANTA','color':'verde','txt':'El precio va a SUBIR ~'+c1(delta)+' cts la semana que viene. Si puedes, aguanta la venta.'}
+    elif delta<=-1.0: sem={'estado':'VENDE','color':'rojo','txt':'El precio va a BAJAR ~'+c1(abs(delta))+' cts la semana que viene. Vender ahora protege margen.'}
+    else: sem={'estado':'ESTABLE','color':'ambar','txt':'Precio estable (±'+c1(abs(delta))+' cts). Sin presión para adelantar ni retrasar ventas.'}
     escenarios=[
       {'nombre':'Base (modelo)','valor':round(base,2),'txt':'Lo más probable con los datos actuales.'},
       {'nombre':'Se agrava PPA / cierran mercados','valor':round(base-0.15,2),'txt':'Menos exportación, sobra carne → precio abajo. (~-15 cts, ilustrativo)'},
