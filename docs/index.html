@@ -305,15 +305,15 @@ function render(d){
   $('sem').innerHTML='<div class="dot"></div><div><div class="st">'+emo+' '+s.estado+'</div><div class="tx">'+s.txt+'</div></div>';
   // hero
   $('predw').textContent='semana '+d.prediccion.w+' ('+weekRange(d.prediccion.y,d.prediccion.w)+')';
-  animateNum($('predv'),d.prediccion.v);
+  animateNum($('predv'),d.prediccion.v,3);
   const dl=d.delta_cts;$('delta').innerHTML='<span class="'+(dl>0?'up-t':dl<0?'down-t':'')+'">'+(dl>0?'▲':dl<0?'▼':'▬')+' '+scts(dl)+' vs la semana pasada</span>';
-  $('lastv').textContent=fmt(d.ultimo.v);$('lastw').textContent='semana '+d.ultimo.w+' · '+d.ultimo.y;
+  $('lastv').textContent=fmt(d.ultimo.v,3);$('lastw').textContent='semana '+d.ultimo.w+' · '+d.ultimo.y;
   $('prec').textContent=fmt(d.precision.modelo_cts,1);$('within').textContent=d.precision.within2;
   renderWhy(d);renderEsc(d);renderEvt(d);renderHist(d);drawChart(d.serie);drawComov(d.serie_paises);
   initChat();
 }
-function animateNum(el,target){let cur=0;const t0=performance.now();
-  function step(t){const p=Math.min((t-t0)/700,1);el.textContent=fmt(cur+(target-cur)*(1-(1-p)*(1-p)));if(p<1)requestAnimationFrame(step);else el.textContent=fmt(target);}
+function animateNum(el,target,dec){dec=dec||2;let cur=0;const t0=performance.now();
+  function step(t){const p=Math.min((t-t0)/700,1);el.textContent=fmt(cur+(target-cur)*(1-(1-p)*(1-p)),dec);if(p<1)requestAnimationFrame(step);else el.textContent=fmt(target,dec);}
   requestAnimationFrame(step);}
 
 function renderWhy(d){
@@ -341,8 +341,8 @@ function renderEvt(d){
 function renderHist(d){
   $('hist').innerHTML=d.historial.slice(-12).reverse().map(r=>{
     let real='<span class="pend">pendiente</span>',err='—';
-    if(r.real){real=fmt(r.real)+' €';const e=parseFloat(r.error);err='<span class="'+(e<=2?'hit':'')+'">'+r.error+' cts</span>';}
-    return '<tr><td>sem '+r.semana+'</td><td>'+fmt(r.pred)+' €</td><td>'+real+'</td><td>'+err+'</td></tr>';
+    if(r.real){real=fmt(r.real,3)+' €';const e=parseFloat(r.error);err='<span class="'+(e<=2?'hit':'')+'">'+r.error+' cts</span>';}
+    return '<tr><td>sem '+r.semana+'</td><td>'+fmt(r.pred,3)+' €</td><td>'+real+'</td><td>'+err+'</td></tr>';
   }).join('');
 }
 
@@ -383,7 +383,7 @@ function lev(a,b){if(a===b)return 0;const m=a.length,n=b.length;if(!m||!n)return
 const A={
  saludo:()=>'¡Hola! 👋 Soy tu asistente del cerdo. Pregúntame lo que quieras: el <b>precio que viene</b>, el <b>por qué</b>, si <b>vendo o aguanto</b>, cómo van los <b>vecinos</b>, si es <b>fiable</b>, los <b>escenarios</b>… lo que sea, y aunque no lo digas exacto te entiendo.',
  quien:()=>'Soy el asistente del modelo de precios de Grupo Jorge 🐷. No busco en internet ni me invento nada: respondo con los <b>datos reales</b> del modelo (predicción, vecinos, estacionalidad, aciertos).',
- prediccion:()=>{const P=D.prediccion;return 'Para la <b>semana '+P.w+' ('+weekRange(P.y,P.w)+')</b> el modelo estima <b>'+fmt(P.v)+' €/kg</b> ('+scts(D.delta_cts)+' respecto al último real de '+fmt(D.ultimo.v)+' €). <span class="mini">Es el precio Cerdo Blanco de la Lonja de Lleida, a 1 semana vista.</span>';},
+ prediccion:()=>{const P=D.prediccion;return 'Para la <b>semana '+P.w+' ('+weekRange(P.y,P.w)+')</b> el modelo estima <b>'+fmt(P.v,3)+' €/kg</b> ('+scts(D.delta_cts)+' respecto al último real de '+fmt(D.ultimo.v,3)+' €). <span class="mini">Es el precio Cerdo Blanco de la Lonja de Lleida, a 1 semana vista.</span>';},
  porque:()=>{const c=D.contrib;let p=[];if(Math.abs(c.francia)>=0.2)p.push('<b>Francia</b> '+scts(c.francia));if(Math.abs(c.estacional)>=0.2)p.push('<b>temporada</b> '+scts(c.estacional));if(Math.abs(c.inercia)>=0.2)p.push('<b>inercia</b> '+scts(c.inercia));if(Math.abs(c.alemania)>=0.2)p.push('<b>Alemania</b> '+scts(c.alemania));return 'El precio previsto ('+scts(D.delta_cts)+') sale de sumar: '+(p.length?p.join(' · '):'nada destacable, precio plano')+'. <span class="mini">Solo cuento lo que el modelo pesa de verdad — cero inventos.</span>';},
  decision:()=>D.semaforo.estado+' → '+D.semaforo.txt,
  vecinos:()=>{const fr=D.vecinos.francia_delta,al=D.vecinos.alemania_delta;return 'Los mercados van juntos, pero <b>Francia y Alemania se mueven ~1 semana antes</b> que España. Esta semana Francia '+(fr>0?'subió':fr<0?'bajó':'no se movió')+' <b>'+fmt(Math.abs(fr),1)+' cts</b> y Alemania '+(al>0?'subió':al<0?'bajó':'repitió')+' <b>'+fmt(Math.abs(al),1)+' cts</b> → por eso arrastran a España.';},
@@ -397,7 +397,7 @@ const A={
  impacto:()=>'Cada <b>céntimo/kg</b> que aciertes vale <b>10.000 €</b> por cada <b>1.000 toneladas</b> que se muevan esa semana. Ajusta al volumen real de Grupo Jorge y ves el dinero en juego en cada decisión de venta.',
  historico:()=>'En el histórico, el máximo fue <b>~2,03 €</b> (abril 2023, guerra de Ucrania + poca oferta) y el mínimo <b>~0,94 €</b> (2016, exceso de carne + veto ruso). El desplome de finales de 2025 fue por la <b>PPA + aranceles de China</b>.',
  cerdoblanco:()=>'El <b>"Cerdo Blanco"</b> es la cotización oficial de la Lonja de Lleida (€/kg vivo) — el precio que mira todo el sector y tu padre. Es el número que predice el modelo. El "equivalente" es otra cifra ajustada para comparar países; no es la que se usa aquí.',
- tendencia:()=>{const d=D.delta_cts;return 'El modelo ve el precio '+(d>0?'<b>subiendo</b>':d<0?'<b>bajando</b>':'<b>plano</b>')+' esta semana ('+scts(d)+'). Del último real ('+fmt(D.ultimo.v)+' €) a la predicción ('+fmt(D.prediccion.v)+' €).';},
+ tendencia:()=>{const d=D.delta_cts;return 'El modelo ve el precio '+(d>0?'<b>subiendo</b>':d<0?'<b>bajando</b>':'<b>plano</b>')+' esta semana ('+scts(d)+'). Del último real ('+fmt(D.ultimo.v,3)+' €) a la predicción ('+fmt(D.prediccion.v,3)+' €).';},
  actualiza:()=>'Los datos se actualizan <b>solos cada día</b>: un bot lee el correo con los informes de Mercolleida, recalcula el modelo y refresca esta web. Última actualización: <b>'+D.generado+'</b>.',
  gracias:()=>'¡A mandar! 🐷 Aquí estoy para lo que necesites.'
 };
