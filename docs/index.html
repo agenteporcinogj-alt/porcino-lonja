@@ -375,45 +375,91 @@ function drawComov(sp){
   $('cc-leg').innerHTML=series.map(s=>'<span class="lg"><span class="sw" style="background:'+s[2]+'"></span>'+s[1]+'</span>').join('');
 }
 
-/* ================= CHAT ================= */
-function botAnswer(q){
-  q=q.toLowerCase();const d=D;const P=d.prediccion,U=d.ultimo,c=d.contrib,fr=d.vecinos.francia_delta,al=d.vecinos.alemania_delta;
-  const rng=weekRange(P.y,P.w);
-  const has=(...w)=>w.some(x=>q.includes(x));
-  if(has('hola','buenas','ey','hey'))return '¡Hola! 👋 Soy el asistente del modelo. Pregúntame por la <b>predicción</b>, el <b>por qué</b>, si <b>vender o aguantar</b>, cómo van los <b>vecinos</b>, o si es <b>fiable</b>.';
-  if(has('vend','aguant','hago','decisi','compr'))return d.semaforo.estado+' → '+d.semaforo.txt;
-  if(has('por qu','porqu','razon','razón','explica','debe'))return whyText();
-  if(has('franc','aleman','vecin','chivat','pais','país'))return 'Los mercados van juntos, pero <b>Francia y Alemania se mueven ~1 semana antes</b> que España. Esta semana Francia '+(fr>0?'subió':fr<0?'bajó':'no se movió')+' <b>'+fmt(Math.abs(fr),1)+' cts</b> y Alemania '+(al>0?'subió':al<0?'bajó':'repitió')+' <b>'+fmt(Math.abs(al),1)+' cts</b> → por eso arrastran a España la semana que viene.';
-  if(has('fiab','acier','precis','funciona','confi','error'))return 'El modelo se equivoca de media <b>'+fmt(d.precision.modelo_cts,1)+' céntimos</b> y acierta dentro de 2 cts el <b>'+d.precision.within2+'%</b> de las semanas. Le gana a "copiar la semana anterior" (que falla '+fmt(d.precision.naive_cts,1)+' cts). <span class="mini">Y cada semana se contrasta con Mercolleida, mira la tabla de abajo.</span>';
-  if(has('china','ppa','peste','escenario','riesgo','pasa si'))return 'Escenarios: si <b>China reabre</b> o sube la demanda → hacia <b>'+fmt(d.escenarios[2].valor)+' €</b>. Si se <b>agrava la PPA</b> y cierran mercados → hacia <b>'+fmt(d.escenarios[1].valor)+' €</b>. Base del modelo: <b>'+fmt(d.escenarios[0].valor)+' €</b>. <span class="mini">Ilustrativo, no cerrado.</span>';
-  if(has('evento','densidad','juicio','ley','octubre','radar','arag'))return '📅 <b>'+d.eventos[0].titulo+' ('+d.eventos[0].fecha+')</b>: '+d.eventos[0].txt;
-  if(has('estacional','temporada','epoca','época','verano','enero','invierno','mes'))return 'El precio hace lo mismo cada año: <b>caro en julio</b> (+9% sobre la media) y <b>barato en enero</b> (−11%). El modelo lo tiene en cuenta: esta semana la temporada aporta <b>'+scts(c.estacional)+'</b>.';
-  if(has('hoy','fecha','que dia','qué día','semana','cuando','cuándo'))return 'Hoy estamos en la <b>semana '+isoWeek(new Date())+'</b>. La predicción es para la <b>semana '+P.w+'</b>, que va del <b>'+rng+'</b>.';
-  if(has('predic','precio','cuant','cuánt','esper','semana que viene','proxim','próxim','valdra','valdrá'))return 'Para la <b>semana '+P.w+' ('+rng+')</b> el modelo estima <b>'+fmt(P.v)+' €/kg</b> ('+scts(d.delta_cts)+' respecto al último real de '+fmt(U.v)+' €). <span class="mini">Estimación a 1 semana vista.</span>';
-  if(has('gracias','genial','crack','perfecto'))return '¡A mandar! 🐷 Cualquier cosa, aquí estoy.';
-  return 'No estoy seguro de eso 🤔. Prueba a preguntarme por: la <b>predicción</b>, el <b>por qué</b>, <b>vender o aguantar</b>, los <b>vecinos</b>, la <b>fiabilidad</b>, los <b>escenarios</b> o el <b>evento</b> del radar.';
+/* ================= CHAT: motor híbrido (léxico + IA semántica) ================= */
+function norm(s){return (s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z0-9ñ ]/g,' ').replace(/\s+/g,' ').trim();}
+function toks(s){return norm(s).split(' ').filter(Boolean);}
+function lev(a,b){if(a===b)return 0;const m=a.length,n=b.length;if(!m||!n)return m||n;let p=Array.from({length:n+1},(_,i)=>i);for(let i=1;i<=m;i++){let prev=p[0],cur=[i];for(let j=1;j<=n;j++){const t=Math.min(p[j]+1,cur[j-1]+1,prev+(a[i-1]===b[j-1]?0:1));cur[j]=t;prev=p[j];}p=cur;}return p[n];}
+// respuestas (usan D en vivo)
+const A={
+ saludo:()=>'¡Hola! 👋 Soy tu asistente del cerdo. Pregúntame lo que quieras: el <b>precio que viene</b>, el <b>por qué</b>, si <b>vendo o aguanto</b>, cómo van los <b>vecinos</b>, si es <b>fiable</b>, los <b>escenarios</b>… lo que sea, y aunque no lo digas exacto te entiendo.',
+ quien:()=>'Soy el asistente del modelo de precios de Grupo Jorge 🐷. No busco en internet ni me invento nada: respondo con los <b>datos reales</b> del modelo (predicción, vecinos, estacionalidad, aciertos).',
+ prediccion:()=>{const P=D.prediccion;return 'Para la <b>semana '+P.w+' ('+weekRange(P.y,P.w)+')</b> el modelo estima <b>'+fmt(P.v)+' €/kg</b> ('+scts(D.delta_cts)+' respecto al último real de '+fmt(D.ultimo.v)+' €). <span class="mini">Es el precio Cerdo Blanco de la Lonja de Lleida, a 1 semana vista.</span>';},
+ porque:()=>{const c=D.contrib;let p=[];if(Math.abs(c.francia)>=0.2)p.push('<b>Francia</b> '+scts(c.francia));if(Math.abs(c.estacional)>=0.2)p.push('<b>temporada</b> '+scts(c.estacional));if(Math.abs(c.inercia)>=0.2)p.push('<b>inercia</b> '+scts(c.inercia));if(Math.abs(c.alemania)>=0.2)p.push('<b>Alemania</b> '+scts(c.alemania));return 'El precio previsto ('+scts(D.delta_cts)+') sale de sumar: '+(p.length?p.join(' · '):'nada destacable, precio plano')+'. <span class="mini">Solo cuento lo que el modelo pesa de verdad — cero inventos.</span>';},
+ decision:()=>D.semaforo.estado+' → '+D.semaforo.txt,
+ vecinos:()=>{const fr=D.vecinos.francia_delta,al=D.vecinos.alemania_delta;return 'Los mercados van juntos, pero <b>Francia y Alemania se mueven ~1 semana antes</b> que España. Esta semana Francia '+(fr>0?'subió':fr<0?'bajó':'no se movió')+' <b>'+fmt(Math.abs(fr),1)+' cts</b> y Alemania '+(al>0?'subió':al<0?'bajó':'repitió')+' <b>'+fmt(Math.abs(al),1)+' cts</b> → por eso arrastran a España.';},
+ fiabilidad:()=>'El modelo se equivoca de media <b>'+fmt(D.precision.modelo_cts,1)+' céntimos</b> (menos de 1 cts = 0,01 €) y acierta dentro de 2 cts el <b>'+D.precision.within2+'%</b> de las semanas. Le gana a "copiar la semana anterior" (que falla '+fmt(D.precision.naive_cts,1)+' cts). <span class="mini">Cada semana se contrasta con Mercolleida, mira la tabla de abajo.</span>',
+ escenarios:()=>'Si <b>China reabre</b> o sube la demanda → hacia <b>'+fmt(D.escenarios[2].valor)+' €</b>. Si se <b>agrava la PPA</b> y cierran mercados → hacia <b>'+fmt(D.escenarios[1].valor)+' €</b>. Base del modelo: <b>'+fmt(D.escenarios[0].valor)+' €</b>. <span class="mini">Ilustrativo, no cerrado.</span>',
+ evento:()=>'📅 <b>'+D.eventos[0].titulo+' ('+D.eventos[0].fecha+')</b>: '+D.eventos[0].txt,
+ estacional:()=>'El precio hace lo mismo cada año: <b>caro en julio</b> (+9% sobre la media) y <b>barato en enero</b> (−11%). Esta semana la temporada aporta <b>'+scts(D.contrib.estacional)+'</b> a la predicción.',
+ fecha:()=>'Hoy estamos en la <b>semana '+isoWeek(new Date())+'</b> del año. La predicción es para la <b>semana '+D.prediccion.w+'</b>, que va del <b>'+weekRange(D.prediccion.y,D.prediccion.w)+'</b>.',
+ largo:()=>'Sincero: el modelo está afinado para <b>1 semana</b> (ahí acierta a céntimos). A meses o un año <b>no hay una cifra fiable</b> — depende demasiado de la PPA, China y el pienso. Lo que sí sé por el patrón: espera el <b>bajón de enero</b> y el <b>pico de verano</b>, y ahora mismo venimos de recuperación tras el desplome de 2025. Para el largo plazo, mira los <b>escenarios</b>.',
+ funciona:()=>'Miro el precio de las últimas semanas de España, cómo se han movido <b>Francia y Alemania</b> (que van 1 semana por delante) y la <b>estacionalidad</b>, y con eso estimo la semana que viene. Empecé simple (medias móviles) y se irá metiendo más (PPA, China, pienso). <span class="mini">Todo con datos de Mercolleida.</span>',
+ impacto:()=>'Cada <b>céntimo/kg</b> que aciertes vale <b>10.000 €</b> por cada <b>1.000 toneladas</b> que se muevan esa semana. Ajusta al volumen real de Grupo Jorge y ves el dinero en juego en cada decisión de venta.',
+ historico:()=>'En el histórico, el máximo fue <b>~2,03 €</b> (abril 2023, guerra de Ucrania + poca oferta) y el mínimo <b>~0,94 €</b> (2016, exceso de carne + veto ruso). El desplome de finales de 2025 fue por la <b>PPA + aranceles de China</b>.',
+ cerdoblanco:()=>'El <b>"Cerdo Blanco"</b> es la cotización oficial de la Lonja de Lleida (€/kg vivo) — el precio que mira todo el sector y tu padre. Es el número que predice el modelo. El "equivalente" es otra cifra ajustada para comparar países; no es la que se usa aquí.',
+ tendencia:()=>{const d=D.delta_cts;return 'El modelo ve el precio '+(d>0?'<b>subiendo</b>':d<0?'<b>bajando</b>':'<b>plano</b>')+' esta semana ('+scts(d)+'). Del último real ('+fmt(D.ultimo.v)+' €) a la predicción ('+fmt(D.prediccion.v)+' €).';},
+ actualiza:()=>'Los datos se actualizan <b>solos cada día</b>: un bot lee el correo con los informes de Mercolleida, recalcula el modelo y refresca esta web. Última actualización: <b>'+D.generado+'</b>.',
+ gracias:()=>'¡A mandar! 🐷 Aquí estoy para lo que necesites.'
+};
+const INTENTS=[
+ {id:'saludo',kw:['hola','buenas','ey','hey','saludos','holaa','que tal','qué tal','como estas'],ex:['hola','buenas','ey qué tal','hola cómo estás','saludos']},
+ {id:'quien',kw:['quien eres','qué eres','que eres','como te llamas','eres una ia','qué eres tú'],ex:['quién eres','qué eres tú','eres una inteligencia artificial','cómo te llamas']},
+ {id:'prediccion',kw:['prediccion','predicción','precio','cuanto','cuánto','cuesta','vale','valdra','valdrá','esperas','estimas','semana que viene','proxima','próxima','que precio','pronostico','pronóstico'],ex:['qué precio esperas','cuánto valdrá el cerdo la semana que viene','qué predicción hay','a cuánto va a estar el cerdo','dime la previsión de precio','qué cotización esperas']},
+ {id:'porque',kw:['por que','por qué','porque','porqué','pq','xq','por q','razon','razón','explica','a que se debe','a qué se debe','motivo','de donde sale','por que sube','por que baja','a que se debe','por que ese precio'],ex:['por qué ese precio','explícame el porqué','a qué se debe la subida','de dónde sale ese número','razones del precio','pq baja el precio','por qué sube']},
+ {id:'decision',kw:['vendo','vender','aguanto','aguantar','vendemos','esperar','espero','compro','decision','decisión','que hago','qué hago','me conviene','saco los cerdos'],ex:['vendo o aguanto','me conviene vender ahora','qué hago con los cerdos','espero o vendo','debería vender esta semana']},
+ {id:'vecinos',kw:['francia','alemania','vecinos','vecino','chivato','chivatos','paises','países','europa','otros paises','como van francia'],ex:['cómo van los vecinos','qué hace Francia','y Alemania cómo va','cómo están los otros países','los mercados de al lado']},
+ {id:'fiabilidad',kw:['fiable','fiabilidad','acierta','aciertos','preciso','precision','precisión','funciona bien','confio','confianza','error','te equivocas','de verdad acierta','es bueno'],ex:['es fiable','cuánto acierta','me puedo fiar','qué error tiene','de verdad funciona','es preciso el modelo']},
+ {id:'escenarios',kw:['china','ppa','peste','escenario','escenarios','riesgo','riesgos','pasa si','y si','que pasaria','qué pasaría','exportacion','aranceles'],ex:['y si hay PPA','qué pasa si China reabre','escenarios de riesgo','y si cierran mercados','qué pasaría con la peste porcina']},
+ {id:'evento',kw:['evento','eventos','densidad','densidades','juicio','ley','normativa','octubre','radar','aragon','aragón','colas','granjas'],ex:['qué hay en el radar','lo del juicio de densidades','qué evento viene','lo de octubre en Aragón','la normativa de las granjas']},
+ {id:'estacional',kw:['estacional','estacionalidad','temporada','epoca','época','verano','invierno','enero','julio','barbacoa','mes del año','patron','patrón'],ex:['cómo afecta la temporada','qué pasa en verano','por qué baja en enero','la estacionalidad del precio','patrón por meses']},
+ {id:'fecha',kw:['hoy','fecha','que dia','qué día','que semana','qué semana','en que semana','cuando es','cuándo es','semana estamos','que dia cae'],ex:['qué día es hoy','en qué semana estamos','a qué días corresponde la semana','cuándo cae esa semana','qué semana del año es']},
+ {id:'largo',kw:['un año','a un año','de aqui a un año','largo plazo','meses','a futuro','dentro de un año','el año que viene','a un mes','proximos meses'],ex:['qué precio ves de aquí a un año','y a largo plazo','cómo estará dentro de unos meses','predicción a un año','y el año que viene']},
+ {id:'funciona',kw:['como funciona','cómo funciona','como predices','qué usas','que usas','como lo haces','como calculas','en que te basas','como esta hecho','qué tiene en cuenta','variables'],ex:['cómo funciona el modelo','en qué te basas para predecir','qué usas para calcular el precio','cómo lo haces','qué variables tienes en cuenta']},
+ {id:'impacto',kw:['cuanto vale acertar','dinero','euros','impacto','cuanto ganamos','cuanto se ahorra','rentable','pasta','beneficio','vale la pena'],ex:['cuánto vale acertar','cuánto dinero está en juego','qué impacto tiene en euros','cuánto se gana con esto','vale la pena']},
+ {id:'historico',kw:['maximo','máximo','minimo','mínimo','record','récord','historico','histórico','mas caro','más caro','mas barato','más barato','cuando fue','pico','desplome'],ex:['cuál ha sido el precio máximo','y el mínimo histórico','cuándo estuvo más caro','el récord de precio','cuándo se desplomó']},
+ {id:'cerdoblanco',kw:['cerdo blanco','equivalente','que precio es','qué precio es','base del precio','que numero','qué número','vivo o canal','de que precio hablas'],ex:['qué es el cerdo blanco','qué precio es este','es vivo o canal','de qué número hablas','qué diferencia hay con el equivalente']},
+ {id:'tendencia',kw:['sube o baja','sube','baja','tendencia','va para arriba','va para abajo','comparado con','vs semana pasada','mejor o peor'],ex:['el precio sube o baja','qué tendencia hay','va para arriba o abajo','cómo va comparado con la semana pasada','está mejor o peor']},
+ {id:'actualiza',kw:['cuando actualizas','cuándo actualizas','datos de cuando','de cuándo son','actualizado','ultima actualizacion','última actualización','el bot','cada cuanto'],ex:['cada cuánto se actualiza','de cuándo son los datos','cuándo fue la última actualización','esto se actualiza solo','el bot cuándo corre']},
+ {id:'gracias',kw:['gracias','genial','crack','perfecto','muy bien','estupendo','buenisimo','buenísimo','eres el mejor'],ex:['gracias','genial crack','muy bien','perfecto gracias','eres el mejor']}
+];
+// léxico
+function lexScores(q){const nq=' '+norm(q)+' ',qt=toks(q),res={};for(const it of INTENTS){let s=0;for(const k of it.kw){if(k.indexOf(' ')>=0){if(nq.indexOf(' '+norm(k)+' ')>=0||nq.indexOf(norm(k))>=0)s+=1.6;}else{const kn=norm(k);for(const t of qt){if(t===kn)s+=1;else if(t.length>4&&kn.length>4&&(t.indexOf(kn)>=0||kn.indexOf(t)>=0))s+=0.8;else if(t.length>4&&kn.length>4&&lev(t,kn)<=1)s+=0.7;}}}res[it.id]=Math.min(1,s/2.2);}return res;}
+// IA semántica (transformers.js en el navegador, con fallback silencioso)
+let EMBED=null,EXVEC=null,embReady=false;
+function setChatStatus(t){const el=document.querySelector('.chat-head .st');if(el)el.textContent=t;}
+async function loadEmb(){
+  try{
+    setChatStatus('● activando IA…');
+    const T=await import('https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2');
+    T.env.allowLocalModels=false;
+    const ext=await T.pipeline('feature-extraction','Xenova/paraphrase-multilingual-MiniLM-L12-v2',{quantized:true});
+    EMBED=async s=>{const o=await ext(s,{pooling:'mean',normalize:true});return o.data;};
+    const vecs=[];for(const it of INTENTS)for(const ex of it.ex)vecs.push([it.id,await EMBED(ex)]);
+    EXVEC=vecs;embReady=true;setChatStatus('● IA semántica activa');
+  }catch(e){setChatStatus('● en línea · datos de hoy');}
 }
-function whyText(){const d=D,c=d.contrib;let parts=[];
-  if(Math.abs(c.francia)>=0.2)parts.push('<b>Francia</b> '+scts(c.francia));
-  if(Math.abs(c.estacional)>=0.2)parts.push('<b>temporada</b> '+scts(c.estacional));
-  if(Math.abs(c.inercia)>=0.2)parts.push('<b>inercia</b> '+scts(c.inercia));
-  if(Math.abs(c.alemania)>=0.2)parts.push('<b>Alemania</b> '+scts(c.alemania));
-  return 'El precio previsto ('+scts(d.delta_cts)+') sale de sumar: '+(parts.length?parts.join(' · '):'nada destacable, precio plano')+'. <span class="mini">Solo cuento lo que el modelo pesa de verdad — cero inventos.</span>';
+function dot(a,b){let s=0;for(let i=0;i<a.length;i++)s+=a[i]*b[i];return s;}
+async function semScores(q){const res={};if(!embReady)return res;const qe=await EMBED(q);for(const[id,v]of EXVEC){const s=dot(qe,v);if(res[id]==null||s>res[id])res[id]=s;}return res;}
+async function route(q){
+  const lex=lexScores(q);let sem={};try{sem=await semScores(q);}catch(e){}
+  let best={id:null,s:-1};
+  for(const it of INTENTS){const lx=lex[it.id]||0,sm=sem[it.id];const s=(sm!=null)?(0.6*sm+0.4*lx):lx;if(s>best.s)best={id:it.id,s};}
+  if(best.s<0.33)return 'Uf, esa no la pillo del todo 🤔. Prueba con: el <b>precio</b> que viene, el <b>por qué</b>, si <b>vendo o aguanto</b>, los <b>vecinos</b>, si es <b>fiable</b>, los <b>escenarios</b> o el <b>evento</b> del radar. (Y sí, aunque no lo digas exacto te entiendo).';
+  return A[best.id]();
 }
-const CHIPS=['¿Qué precio esperas?','¿Por qué?','¿Vendo o aguanto?','¿Cómo van los vecinos?','¿Es fiable?','¿Y si hay PPA o China?'];
+const CHIPS=['¿Qué precio esperas?','¿Por qué?','¿Vendo o aguanto?','¿Cómo van los vecinos?','¿Es fiable?','¿Y si hay PPA o China?','¿De aquí a un año?'];
 function initChat(){
   $('chips').innerHTML=CHIPS.map(c=>'<button class="chip">'+c+'</button>').join('');
   $('chips').querySelectorAll('.chip').forEach(b=>b.onclick=()=>ask(b.textContent));
   $('csend').onclick=()=>{if($('cin').value.trim())ask($('cin').value.trim());};
   $('cin').addEventListener('keydown',e=>{if(e.key==='Enter'&&$('cin').value.trim())ask($('cin').value.trim());});
   if(!$('cbody').dataset.init){$('cbody').dataset.init='1';
-    setTimeout(()=>botSay('¡Hola! 👋 Soy tu asistente. La predicción de esta semana es <b>'+fmt(D.prediccion.v)+' €/kg</b>. Pregúntame lo que quieras o toca una opción de abajo.'),350);}
+    setTimeout(()=>{addBub('¡Hola! 👋 Soy tu asistente. La predicción de esta semana es <b>'+fmt(D.prediccion.v)+' €/kg</b>. Pregúntame lo que quieras (aunque no lo digas exacto te entiendo) o toca una opción.','bot');},350);
+    loadEmb();}
 }
-function ask(text){addBub(text,'me');$('cin').value='';setTimeout(()=>botSay(botAnswer(text)),260);}
 function addBub(html,cls){const b=document.createElement('div');b.className='bub '+cls;b.innerHTML=html;$('cbody').appendChild(b);$('cbody').scrollTop=$('cbody').scrollHeight;return b;}
-function botSay(html){const t=document.createElement('div');t.className='typing';t.innerHTML='<span></span><span></span><span></span>';$('cbody').appendChild(t);$('cbody').scrollTop=$('cbody').scrollHeight;
-  const delay=Math.min(1100,500+html.length*4);
-  setTimeout(()=>{t.remove();addBub(html,'bot');},delay);}
+function showTyping(){const t=document.createElement('div');t.className='typing';t.innerHTML='<span></span><span></span><span></span>';$('cbody').appendChild(t);$('cbody').scrollTop=$('cbody').scrollHeight;return t;}
+async function ask(text){addBub(text,'me');$('cin').value='';const t=showTyping();const ans=await route(text);setTimeout(()=>{t.remove();addBub(ans,'bot');},Math.min(900,420+ans.length*3));}
 
 /* gate */
 const EYE_OPEN='<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1.5 12S5.5 5 12 5s10.5 7 10.5 7-4 7-10.5 7S1.5 12 1.5 12z"/><circle cx="12" cy="12" r="3"/></svg>';
