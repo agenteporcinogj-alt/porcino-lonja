@@ -143,7 +143,7 @@ def paso_modelo():
         for w in range(1,53):
             e=cell('CEBADO LLEIDA',w,2+yi)
             if e is None: continue
-            seq.append({'y':y,'w':w,'e':e,'f':cell('FRANCIA',w,2+2*yi+1),'a':cell('ALEMANIA',w,2+yi)})
+            seq.append({'y':y,'w':w,'e':e,'f':cell('FRANCIA',w,2+2*yi+1),'a':cell('ALEMANIA',w,2+yi),'d':cell('DINAMARCA',w,2+yi)})
     esp={(r['y'],r['w']):r['e'] for r in seq}; allmean=st.mean(esp.values())
     seas={w: st.mean([esp[(y,w)] for y in years if (y,w) in esp])/allmean*100 for w in range(1,53)}
     rows=[]
@@ -152,20 +152,35 @@ def paso_modelo():
         rows.append({'y':c['y'],'w':c['w'],'prev':p1['e'],'dESP':c['e']-p1['e'],'target':c['e'],
             'x':[1.0,p1['e']-p2['e'],(p1['f']-p2['f']) if p1['f'] and p2['f'] else 0.0,
                  (p1['a']-p2['a']) if p1['a'] and p2['a'] else 0.0,(seas[c['w']]-seas[p1['w']])/100.0*allmean]})
-    em=[];en=[]
+    em=[];en=[];within=0;nb=0
     for d in rows:
         if d['y']<2019: continue
         tr=[r for r in rows if (r['y']*100+r['w'])<(d['y']*100+d['w'])]
         if len(tr)<60: continue
         b=fit(tr); pr=d['prev']+sum(bi*xi for bi,xi in zip(b,d['x']))
         em.append(abs(pr-d['target'])); en.append(abs(d['prev']-d['target']))
+        if abs(pr-d['target'])<=0.02: within+=1
+        nb+=1
     beta=fit(rows); last=seq[-1]; p1=seq[-2]; p2=seq[-3]; nextw=last['w']%52+1
     x=[1.0,last['e']-p1['e'],(last['f']-p1['f']) if last['f'] and p1['f'] else 0.0,
        (last['a']-p1['a']) if last['a'] and p1['a'] else 0.0,(seas[nextw]-seas[last['w']])/100.0*allmean]
     pred=round(last['e']+sum(bi*xi for bi,xi in zip(beta,x)),3)
+    contrib={'inercia':round(beta[1]*x[1]*100,1),'francia':round(beta[2]*x[2]*100,1),
+             'alemania':round(beta[3]*x[3]*100,1),'estacional':round(beta[4]*x[4]*100,1)}
+    vecinos={'francia_delta':round((last['f']-p1['f'])*100,1) if last['f'] and p1['f'] else None,
+             'alemania_delta':round((last['a']-p1['a'])*100,1) if last['a'] and p1['a'] else None}
     serie=[{'y':r['y'],'w':r['w'],'v':r['e']} for r in seq[-104:]]
-    return {'mae_m':sum(em)/len(em),'mae_n':sum(en)/len(en),'last':{'y':last['y'],'w':last['w'],'v':round(last['e'],3)},
-            'nextw':nextw,'nexty':last['y'] if nextw>last['w'] else last['y']+1,'pred':pred,'esp':esp,'serie':serie}
+    win=seq[-104:]
+    def idx(win,key):
+        base=next((r[key] for r in win if r.get(key) is not None),None)
+        return [round(r[key]/base*100,1) if (r.get(key) is not None and base) else None for r in win]
+    serie_paises={'labels':[{'y':r['y'],'w':r['w']} for r in win],
+                  'esp':idx(win,'e'),'fra':idx(win,'f'),'ale':idx(win,'a'),'din':idx(win,'d')}
+    return {'mae_m':sum(em)/len(em),'mae_n':sum(en)/len(en),'within2':round(within/nb*100) if nb else 0,
+            'last':{'y':last['y'],'w':last['w'],'v':round(last['e'],3)},
+            'nextw':nextw,'nexty':last['y'] if nextw>last['w'] else last['y']+1,'pred':pred,'esp':esp,'serie':serie,
+            'delta_cts':round((pred-last['e'])*100,1),'contrib':contrib,'vecinos':vecinos,
+            'seas':{str(w):round(seas[w],1) for w in seas},'serie_paises':serie_paises}
 
 # ---------- 4) REGISTRO ----------
 def paso_registro(m):
@@ -192,11 +207,21 @@ def cifrar(plaintext,password):
     iv=os.urandom(12); ct=AESGCM(key).encrypt(iv,plaintext.encode(),None)
     return base64.b64encode(salt+iv+ct).decode()
 def paso_web(m,historial):
+    delta=m['delta_cts']; base=m['pred']
+    if delta>=1.0: sem={'estado':'AGUANTA','color':'verde','txt':'El precio va a SUBIR ~%.1f cts la semana que viene. Si puedes, aguanta la venta.'%delta}
+    elif delta<=-1.0: sem={'estado':'VENDE','color':'rojo','txt':'El precio va a BAJAR ~%.1f cts la semana que viene. Vender ahora protege margen.'%abs(delta)}
+    else: sem={'estado':'ESTABLE','color':'ambar','txt':'Precio estable (±%.1f cts). Sin presión para adelantar ni retrasar ventas.'%abs(delta)}
+    escenarios=[
+      {'nombre':'Base (modelo)','valor':round(base,2),'txt':'Lo más probable con los datos actuales.'},
+      {'nombre':'Se agrava PPA / cierran mercados','valor':round(base-0.15,2),'txt':'Menos exportación, sobra carne → precio abajo. (~-15 cts, ilustrativo)'},
+      {'nombre':'China reabre / sube demanda','valor':round(base+0.15,2),'txt':'Más demanda exterior → precio arriba. (~+15 cts, ilustrativo)'}]
+    eventos=[{'fecha':'6-7 oct 2026','titulo':'Juicio de densidades (Aragón)','txt':'Un juez decide si se aplica la norma europea de densidades (cortar colas → más espacio por animal). Si sale adelante: menos cerdos por granja → menos oferta española (puede empujar el precio arriba) y ~-10% de capacidad para Grupo Jorge (~740 cebos).'}]
     payload={'generado':datetime.datetime.now().strftime('%d/%m/%Y %H:%M'),
-             'ultimo':m['last'],'prediccion':{'y':m['nexty'],'w':m['nextw'],'v':m['pred']},
-             'precision':{'modelo_cts':round(m['mae_m']*100,1),'naive_cts':round(m['mae_n']*100,1)},
+             'ultimo':m['last'],'prediccion':{'y':m['nexty'],'w':m['nextw'],'v':m['pred']},'delta_cts':delta,
+             'precision':{'modelo_cts':round(m['mae_m']*100,1),'naive_cts':round(m['mae_n']*100,1),'within2':m['within2']},
              'historial':[{'semana':r['semana'],'pred':r['prediccion'],'real':r.get('real',''),'error':r.get('error_cts','')} for r in historial],
-             'serie':m['serie']}
+             'serie':m['serie'],'serie_paises':m['serie_paises'],'contrib':m['contrib'],'vecinos':m['vecinos'],
+             'seas':m['seas'],'semaforo':sem,'escenarios':escenarios,'eventos':eventos}
     pw=os.environ.get('WEB_PASSWORD','cerdo')
     enc=cifrar(json.dumps(payload,ensure_ascii=False),pw)
     open(ENC_OUT,'w').write('window.ENC="'+enc+'";')

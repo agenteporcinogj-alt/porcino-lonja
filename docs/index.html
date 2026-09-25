@@ -9,17 +9,21 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Spectral:wght@400;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
 <style>
 :root{--ground:#15130F;--surface:#1E1B16;--surface2:#232019;--ink:#F0EBE2;--muted:#A79F92;
-  --line:#332F27;--accent:#E4675A;--accent-soft:#E4675A22;--good:#2CBE92;--bad:#E4675A;}
+  --line:#332F27;--accent:#E4675A;--accent-soft:#E4675A1c;--good:#2CBE92;--good-soft:#2CBE9218;
+  --bad:#E4463A;--bad-soft:#E4463A18;--amber:#E9A73C;--amber-soft:#E9A73C18;--blue:#4DA3DA;--dane:#C9A24B;}
 *{box-sizing:border-box}
 [hidden]{display:none!important}
 body{margin:0;background:var(--ground);color:var(--ink);font-family:"IBM Plex Sans",system-ui,sans-serif;
   -webkit-font-smoothing:antialiased;line-height:1.5;padding:env(safe-area-inset-top) 0 40px}
-.wrap{max-width:640px;margin:0 auto;padding:0 16px;padding-block:24px}
+.wrap{max-width:680px;margin:0 auto;padding:0 16px;padding-block:22px}
 .mono{font-family:"IBM Plex Mono",monospace}
 .tnum{font-variant-numeric:tabular-nums}
+@keyframes pop{0%{transform:scale(.96);opacity:0}100%{transform:scale(1);opacity:1}}
+@keyframes fade{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+.rise{animation:fade .5s ease both}
 
-/* gate */
-#gate{position:fixed;inset:0;background:var(--ground);display:flex;align-items:center;justify-content:center;padding:20px;z-index:10}
+/* ===== GATE ===== */
+#gate{position:fixed;inset:0;background:var(--ground);display:flex;align-items:center;justify-content:center;padding:20px;z-index:20}
 .lock{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:30px 24px;max-width:360px;width:100%;text-align:center}
 .lock .emoji{font-size:2.6rem}
 .lock h1{font-family:"Spectral",serif;font-size:1.4rem;margin:12px 0 4px}
@@ -31,43 +35,124 @@ body{margin:0;background:var(--ground);color:var(--ink);font-family:"IBM Plex Sa
 .lock .eye{position:absolute;right:6px;top:50%;transform:translateY(-50%);width:auto;margin:0;padding:6px;
   background:none;border:0;color:var(--muted);cursor:pointer;display:flex;align-items:center;justify-content:center}
 .lock .eye svg{display:block}
-.lock button{margin-top:12px;width:100%;padding:13px;border:0;border-radius:10px;background:var(--accent);color:#fff;
+.lock button#go{margin-top:12px;width:100%;padding:13px;border:0;border-radius:10px;background:var(--accent);color:#fff;
   font-weight:600;font-size:1rem;cursor:pointer;font-family:inherit}
 .lock .err{color:var(--bad);font-size:.85rem;margin-top:10px;min-height:1em}
 
-header .eyebrow{font-family:"IBM Plex Mono",monospace;font-size:.68rem;letter-spacing:.16em;text-transform:uppercase;color:var(--accent);font-weight:600;margin:0}
-header h1{font-family:"Spectral",serif;font-size:1.7rem;margin:6px 0 2px;letter-spacing:-.01em}
-header .sub{color:var(--muted);font-size:.82rem;font-family:"IBM Plex Mono",monospace}
+/* ===== HEADER ===== */
+header .eyebrow{font-family:"IBM Plex Mono",monospace;font-size:.66rem;letter-spacing:.16em;text-transform:uppercase;color:var(--accent);font-weight:600;margin:0}
+header h1{font-family:"Spectral",serif;font-size:1.65rem;margin:6px 0 2px;letter-spacing:-.01em}
+header .sub{color:var(--muted);font-size:.8rem;font-family:"IBM Plex Mono",monospace}
+.today{margin-top:8px;font-size:.85rem;color:var(--muted)}
+.today b{color:var(--ink)}
 
-.hero{background:linear-gradient(180deg,var(--accent-soft),transparent),var(--surface);border:1px solid var(--accent);
-  border-radius:16px;padding:22px;margin:20px 0;text-align:center}
-.hero .lbl{font-size:.8rem;color:var(--muted);letter-spacing:.03em}
-.hero .val{font-family:"Spectral",serif;font-weight:700;font-size:3.4rem;line-height:1;margin:6px 0}
+/* ===== HERO ===== */
+.hero{position:relative;overflow:hidden;background:linear-gradient(180deg,var(--accent-soft),transparent),var(--surface);
+  border:1px solid var(--accent);border-radius:18px;padding:22px;margin:18px 0 14px;text-align:center}
+.hero .lbl{font-size:.82rem;color:var(--muted)}
+.hero .lbl b{color:var(--ink)}
+.hero .val{font-family:"Spectral",serif;font-weight:700;font-size:3.6rem;line-height:1;margin:8px 0 4px}
 .hero .val small{font-size:1.4rem;color:var(--muted)}
-.hero .note{font-size:.82rem;color:var(--muted)}
+.hero .delta{font-size:.9rem;font-weight:600}
+.hero .note{font-size:.78rem;color:var(--muted);margin-top:6px}
 
-.row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+/* ===== SEMAFORO ===== */
+.sem{display:flex;gap:13px;align-items:center;border-radius:14px;padding:15px 17px;margin-bottom:14px;border:1px solid}
+.sem .dot{width:14px;height:14px;border-radius:50%;flex:none;box-shadow:0 0 0 4px #0003}
+.sem.verde{background:var(--good-soft);border-color:var(--good)}.sem.verde .dot{background:var(--good)}
+.sem.rojo{background:var(--bad-soft);border-color:var(--bad)}.sem.rojo .dot{background:var(--bad)}
+.sem.ambar{background:var(--amber-soft);border-color:var(--amber)}.sem.ambar .dot{background:var(--amber)}
+.sem .st{font-family:"Spectral",serif;font-weight:700;font-size:1.05rem;margin:0 0 1px}
+.sem .tx{font-size:.85rem;color:var(--muted)}
+
+/* ===== GRID CARDS ===== */
+.row{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px}
 .card{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:15px}
 .card .k{font-size:.72rem;color:var(--muted)}
 .card .v{font-family:"Spectral",serif;font-weight:700;font-size:1.5rem;line-height:1.1;margin-top:2px}
-.card .u{font-size:.72rem;color:var(--muted);font-family:"IBM Plex Mono",monospace}
+.card .u{font-size:.7rem;color:var(--muted);font-family:"IBM Plex Mono",monospace}
 
-h2{font-family:"Spectral",serif;font-size:1.15rem;margin:26px 0 10px}
-.chartcard{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:16px 12px 8px}
-svg{width:100%;height:auto;display:block}
-svg text{font-family:"IBM Plex Mono",monospace}
+/* ===== SECTIONS ===== */
+section{margin:22px 0}
+h2{font-family:"Spectral",serif;font-size:1.2rem;margin:0 0 4px}
+.slab{color:var(--muted);font-size:.86rem;margin:0 0 12px}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:16px}
 
+/* ===== WHY bars ===== */
+.why-sum{font-size:.92rem;margin:0 0 14px;color:var(--ink)}
+.why-sum b{color:var(--accent)}
+.factor{display:grid;grid-template-columns:96px 1fr 52px;align-items:center;gap:10px;margin:9px 0;font-size:.85rem}
+.factor .fn{color:var(--muted)}
+.bartrack{position:relative;height:10px;background:var(--surface2);border-radius:5px;overflow:hidden}
+.barmid{position:absolute;left:50%;top:0;bottom:0;width:1px;background:var(--line)}
+.barfill{position:absolute;top:0;bottom:0;border-radius:5px;transition:width .6s ease}
+.barfill.up{background:var(--good);left:50%}.barfill.down{background:var(--bad);right:50%}
+.factor .fv{text-align:right;font-family:"IBM Plex Mono",monospace;font-weight:600}
+.up-t{color:var(--good)}.down-t{color:var(--bad)}
+
+/* charts */
+.chartcard{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:14px 10px 6px;position:relative}
+svg{width:100%;height:auto;display:block}svg text{font-family:"IBM Plex Mono",monospace}
+.legend{display:flex;flex-wrap:wrap;gap:6px 16px;margin:0 4px 8px;font-size:.78rem}
+.lg{display:inline-flex;align-items:center;gap:6px;color:var(--muted)}
+.sw{width:13px;height:3px;border-radius:2px}
+.ctip{position:absolute;pointer-events:none;background:var(--ink);color:var(--ground);font-family:"IBM Plex Mono",monospace;
+  font-size:.72rem;padding:5px 8px;border-radius:6px;transform:translate(-50%,-135%);white-space:nowrap;opacity:0;transition:opacity .08s;z-index:6}
+
+/* escenarios */
+.esc{display:flex;flex-direction:column;gap:10px}
+.escrow{display:flex;justify-content:space-between;align-items:center;gap:12px;background:var(--surface2);border:1px solid var(--line);border-radius:11px;padding:12px 14px}
+.escrow .en{font-size:.85rem}.escrow .en b{display:block;font-size:.72rem;color:var(--muted);font-weight:500;margin-top:2px}
+.escrow .ev{font-family:"Spectral",serif;font-weight:700;font-size:1.4rem;white-space:nowrap}
+
+/* eventos */
+.evt{display:flex;gap:13px;background:var(--surface2);border:1px solid var(--line);border-left:3px solid var(--amber);border-radius:11px;padding:14px 16px}
+.evt .d{font-family:"IBM Plex Mono",monospace;font-size:.72rem;color:var(--amber);font-weight:600;white-space:nowrap}
+.evt h3{margin:0 0 4px;font-family:"Spectral",serif;font-size:1rem}
+.evt p{margin:0;font-size:.83rem;color:var(--muted)}
+
+/* impacto */
+.imp{text-align:center;padding:18px}
+.imp .big{font-family:"Spectral",serif;font-weight:700;font-size:2.2rem;color:var(--accent)}
+.imp p{font-size:.85rem;color:var(--muted);margin:6px 0 0}
+
+/* tabla */
 table{width:100%;border-collapse:collapse;font-size:.9rem}
 th,td{padding:9px 6px;text-align:right;border-bottom:1px solid var(--line)}
-th{color:var(--muted);font-weight:500;font-size:.74rem;text-transform:uppercase;letter-spacing:.04em}
+th{color:var(--muted);font-weight:500;font-size:.72rem;text-transform:uppercase;letter-spacing:.04em}
 td:first-child,th:first-child{text-align:left}
-.hit{color:var(--good);font-weight:600}.miss{color:var(--muted)}
-.pend{color:var(--muted);font-style:italic}
+.hit{color:var(--good);font-weight:600}.pend{color:var(--muted);font-style:italic}
+
+/* ===== CHAT ===== */
+.chat{background:var(--surface);border:1px solid var(--line);border-radius:16px;overflow:hidden}
+.chat-head{display:flex;align-items:center;gap:10px;padding:13px 16px;border-bottom:1px solid var(--line);background:var(--surface2)}
+.chat-head .av{width:34px;height:34px;border-radius:50%;background:linear-gradient(135deg,var(--accent),#8a3d34);display:flex;align-items:center;justify-content:center;font-size:1.1rem}
+.chat-head .nm{font-weight:600;font-size:.95rem}.chat-head .st{font-size:.72rem;color:var(--good)}
+.chat-body{padding:14px;display:flex;flex-direction:column;gap:10px;max-height:420px;overflow-y:auto}
+.bub{max-width:85%;padding:10px 13px;border-radius:14px;font-size:.9rem;line-height:1.45;animation:pop .25s ease both}
+.bub.bot{align-self:flex-start;background:var(--surface2);border:1px solid var(--line);border-bottom-left-radius:4px}
+.bub.me{align-self:flex-end;background:var(--accent);color:#fff;border-bottom-right-radius:4px}
+.bub b{color:var(--accent)}.bub.me b{color:#fff}
+.bub .mini{display:block;font-size:.78rem;color:var(--muted);margin-top:5px}
+.typing{align-self:flex-start;display:flex;gap:4px;padding:12px 14px;background:var(--surface2);border:1px solid var(--line);border-radius:14px;border-bottom-left-radius:4px}
+.typing span{width:7px;height:7px;border-radius:50%;background:var(--muted);animation:bl 1s infinite}
+.typing span:nth-child(2){animation-delay:.2s}.typing span:nth-child(3){animation-delay:.4s}
+@keyframes bl{0%,60%,100%{opacity:.25;transform:translateY(0)}30%{opacity:1;transform:translateY(-4px)}}
+.chips{display:flex;flex-wrap:wrap;gap:7px;padding:10px 14px 14px;border-top:1px solid var(--line)}
+.chip{background:var(--surface2);border:1px solid var(--line);color:var(--ink);border-radius:18px;padding:7px 13px;font-size:.82rem;cursor:pointer;font-family:inherit;transition:border-color .15s}
+.chip:hover,.chip:active{border-color:var(--accent);color:var(--accent)}
+.chat-input{display:flex;gap:8px;padding:0 14px 14px}
+.chat-input input{flex:1;padding:11px 13px;border-radius:22px;border:1px solid var(--line);background:var(--surface2);color:var(--ink);font-size:.9rem;font-family:inherit}
+.chat-input input:focus{outline:2px solid var(--accent)}
+.chat-input button{border:0;border-radius:50%;width:42px;height:42px;background:var(--accent);color:#fff;font-size:1.1rem;cursor:pointer;flex:none}
+
 footer{margin-top:26px;text-align:center;color:var(--muted);font-size:.72rem;font-family:"IBM Plex Mono",monospace}
 footer a{color:var(--accent);cursor:pointer}
+@media(max-width:520px){.hero .val{font-size:3rem}.factor{grid-template-columns:80px 1fr 46px}}
 </style>
 </head>
 <body>
+
 <div id="gate">
   <div class="lock">
     <div class="emoji">🐷🔒</div>
@@ -83,31 +168,102 @@ footer a{color:var(--accent);cursor:pointer}
 </div>
 
 <div class="wrap" id="app" hidden>
-  <header>
+  <header class="rise">
     <p class="eyebrow">Grupo Jorge · Modelo de predicción</p>
     <h1>Precio del cerdo · Lonja de Lleida</h1>
     <div class="sub" id="gen"></div>
+    <div class="today" id="today"></div>
   </header>
 
-  <div class="hero">
-    <div class="lbl">Predicción para la <span id="predw"></span></div>
-    <div class="val"><span id="predv"></span> <small>€/kg</small></div>
-    <div class="note" id="prednote"></div>
+  <!-- SEMAFORO -->
+  <div id="sem" class="rise"></div>
+
+  <!-- HERO -->
+  <div class="hero rise">
+    <div class="lbl">Predicción para la <b id="predw"></b></div>
+    <div class="val"><span id="predv">—</span> <small>€/kg</small></div>
+    <div class="delta" id="delta"></div>
+    <div class="note">Estimación a 1 semana vista · modelo v1 (medias móviles + vecinos + estacionalidad)</div>
   </div>
 
-  <div class="row">
+  <div class="row rise">
     <div class="card"><div class="k">Último dato real</div><div class="v tnum"><span id="lastv"></span> €</div><div class="u" id="lastw"></div></div>
-    <div class="card"><div class="k">Precisión del modelo</div><div class="v tnum"><span id="prec"></span> cts</div><div class="u">error medio (vs <span id="naive"></span> lo simple)</div></div>
+    <div class="card"><div class="k">Fiabilidad</div><div class="v tnum"><span id="prec"></span> cts</div><div class="u">error medio · <span id="within"></span>% dentro de 2 cts</div></div>
   </div>
 
-  <h2>Evolución reciente</h2>
-  <div class="chartcard"><div id="chart"></div></div>
+  <!-- CHAT ASISTENTE -->
+  <section class="rise">
+    <h2>Pregúntale al modelo</h2>
+    <p class="slab">Habla con el asistente como con una IA. Responde con los datos reales, sin inventarse nada.</p>
+    <div class="chat">
+      <div class="chat-head"><div class="av">🐷</div><div><div class="nm">Asistente Porcino</div><div class="st">● en línea · datos de hoy</div></div></div>
+      <div class="chat-body" id="cbody"></div>
+      <div class="chips" id="chips"></div>
+      <div class="chat-input">
+        <input id="cin" placeholder="Escribe tu pregunta…" autocomplete="off">
+        <button id="csend" aria-label="Enviar">➤</button>
+      </div>
+    </div>
+  </section>
 
-  <h2>Predicción vs real (aciertos)</h2>
-  <div class="chartcard" style="padding:6px 12px">
-    <table><thead><tr><th>Semana</th><th>Predicción</th><th>Real</th><th>Error</th></tr></thead>
-    <tbody id="hist"></tbody></table>
-  </div>
+  <!-- POR QUE -->
+  <section class="rise">
+    <h2>¿Por qué ese precio?</h2>
+    <p class="slab">Lo que empuja el precio de la semana que viene, en céntimos. Verde sube, rojo baja.</p>
+    <div class="panel">
+      <p class="why-sum" id="whysum"></p>
+      <div id="whybars"></div>
+    </div>
+  </section>
+
+  <!-- CHIVATOS -->
+  <section class="rise">
+    <h2>Los vecinos (chivatos)</h2>
+    <p class="slab">Francia y Alemania se mueven ~1 semana antes que España. Mismos días, puestos a la misma altura de salida.</p>
+    <div class="chartcard">
+      <div class="legend" id="cc-leg"></div>
+      <div id="comov"></div>
+    </div>
+  </section>
+
+  <!-- EVOLUCION -->
+  <section class="rise">
+    <h2>Evolución reciente</h2>
+    <p class="slab">Precio de España, últimas semanas. Pasa el dedo por encima.</p>
+    <div class="chartcard"><div id="chart"></div></div>
+  </section>
+
+  <!-- ESCENARIOS -->
+  <section class="rise">
+    <h2>Escenarios</h2>
+    <p class="slab">Qué pasaría con el precio según lo que ocurra fuera. Ilustrativo, no predicción cerrada.</p>
+    <div class="esc" id="esc"></div>
+  </section>
+
+  <!-- EVENTOS -->
+  <section class="rise">
+    <h2>En el radar</h2>
+    <p class="slab">Cosas que pueden mover el mercado y hay que vigilar.</p>
+    <div id="eventos"></div>
+  </section>
+
+  <!-- IMPACTO -->
+  <section class="rise">
+    <h2>Cuánto vale acertar</h2>
+    <div class="panel imp">
+      <div class="big">10.000 €</div>
+      <p>Es lo que vale <b>cada céntimo/kg</b> que aciertes, por cada <b>1.000 toneladas</b> que se muevan esa semana. Ajusta al volumen real de Grupo Jorge y ves el dinero en juego.</p>
+    </div>
+  </section>
+
+  <!-- TRACK RECORD -->
+  <section class="rise">
+    <h2>Predicción vs real</h2>
+    <p class="slab">Cada semana comparamos con Mercolleida. Esto es el historial de aciertos.</p>
+    <div class="chartcard" style="padding:4px 12px">
+      <table><thead><tr><th>Semana</th><th>Predicción</th><th>Real</th><th>Error</th></tr></thead><tbody id="hist"></tbody></table>
+    </div>
+  </section>
 
   <footer>Datos: Mercolleida · Actualización automática diaria · <a id="logout">cerrar sesión</a></footer>
 </div>
@@ -116,67 +272,160 @@ footer a{color:var(--accent);cursor:pointer}
 <script>
 const $=id=>document.getElementById(id);
 const fmt=(v,d=2)=>Number(v).toLocaleString('es-ES',{minimumFractionDigits:d,maximumFractionDigits:d});
+const scts=v=>(v>0?'+':'')+fmt(v,1)+' cts';
+const MES=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+
 async function decryptData(b64,password){
   const raw=Uint8Array.from(atob(b64),c=>c.charCodeAt(0));
   const salt=raw.slice(0,16),iv=raw.slice(16,28),data=raw.slice(28);
   const km=await crypto.subtle.importKey('raw',new TextEncoder().encode(password),'PBKDF2',false,['deriveKey']);
   const key=await crypto.subtle.deriveKey({name:'PBKDF2',salt,iterations:200000,hash:'SHA-256'},km,{name:'AES-GCM',length:256},false,['decrypt']);
-  const plain=await crypto.subtle.decrypt({name:'AES-GCM',iv},key,data);
-  return JSON.parse(new TextDecoder().decode(plain));
+  return JSON.parse(new TextDecoder().decode(await crypto.subtle.decrypt({name:'AES-GCM',iv},key,data)));
 }
+// ISO week -> lunes..domingo
+function weekRange(y,w){
+  const d=new Date(Date.UTC(y,0,1+(w-1)*7));const dow=d.getUTCDay();
+  if(dow<=4)d.setUTCDate(d.getUTCDate()-((dow+6)%7));else d.setUTCDate(d.getUTCDate()+(8-dow));
+  const end=new Date(d);end.setUTCDate(d.getUTCDate()+6);
+  const f=x=>x.getUTCDate()+' '+MES[x.getUTCMonth()];
+  return f(d)+'–'+f(end);
+}
+function isoWeek(dt){const d=new Date(Date.UTC(dt.getFullYear(),dt.getMonth(),dt.getDate()));const dn=(d.getUTCDay()+6)%7;d.setUTCDate(d.getUTCDate()-dn+3);const f=new Date(Date.UTC(d.getUTCFullYear(),0,4));return 1+Math.round(((d-f)/86400000-3+((f.getUTCDay()+6)%7))/7);}
+
+let D=null;
 function render(d){
-  window.__d=d;
-  $('gate').hidden=true; $('app').hidden=false;
+  D=d;window.__d=d;
+  $('gate').hidden=true;$('app').hidden=false;
   $('gen').textContent='Actualizado '+d.generado;
-  $('predw').textContent='semana '+d.prediccion.w+' de '+d.prediccion.y;
-  $('predv').textContent=fmt(d.prediccion.v);
-  $('prednote').textContent='Estimación a 1 semana vista (modelo v1)';
-  $('lastv').textContent=fmt(d.ultimo.v); $('lastw').textContent='semana '+d.ultimo.w+' · '+d.ultimo.y;
-  $('prec').textContent=fmt(d.precision.modelo_cts,1); $('naive').textContent=fmt(d.precision.naive_cts,1);
-  // tabla historial (ultimas 10, mas recientes arriba)
-  const rows=d.historial.slice(-10).reverse().map(r=>{
-    let real='<span class="pend">pendiente</span>',err='—';
-    if(r.real){real=fmt(r.real)+' €';const e=parseFloat(r.error);err='<span class="'+(e<=2?'hit':'miss')+'">'+r.error+' cts</span>';}
-    return `<tr><td>sem ${r.semana}</td><td>${fmt(r.pred)} €</td><td>${real}</td><td>${err}</td></tr>`;
+  const now=new Date();
+  $('today').innerHTML='Hoy es <b>'+now.getDate()+' de '+['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'][now.getMonth()]+'</b> · estamos en la <b>semana '+isoWeek(now)+'</b> del año.';
+  // semaforo
+  const s=d.semaforo;const emo={verde:'🟢',rojo:'🔴',ambar:'🟡'}[s.color];
+  $('sem').className='sem '+s.color+' rise';
+  $('sem').innerHTML='<div class="dot"></div><div><div class="st">'+emo+' '+s.estado+'</div><div class="tx">'+s.txt+'</div></div>';
+  // hero
+  $('predw').textContent='semana '+d.prediccion.w+' ('+weekRange(d.prediccion.y,d.prediccion.w)+')';
+  animateNum($('predv'),d.prediccion.v);
+  const dl=d.delta_cts;$('delta').innerHTML='<span class="'+(dl>0?'up-t':dl<0?'down-t':'')+'">'+(dl>0?'▲':dl<0?'▼':'▬')+' '+scts(dl)+' vs la semana pasada</span>';
+  $('lastv').textContent=fmt(d.ultimo.v);$('lastw').textContent='semana '+d.ultimo.w+' · '+d.ultimo.y;
+  $('prec').textContent=fmt(d.precision.modelo_cts,1);$('within').textContent=d.precision.within2;
+  renderWhy(d);renderEsc(d);renderEvt(d);renderHist(d);drawChart(d.serie);drawComov(d.serie_paises);
+  initChat();
+}
+function animateNum(el,target){let cur=0;const t0=performance.now();
+  function step(t){const p=Math.min((t-t0)/700,1);el.textContent=fmt(cur+(target-cur)*(1-(1-p)*(1-p)));if(p<1)requestAnimationFrame(step);else el.textContent=fmt(target);}
+  requestAnimationFrame(step);}
+
+function renderWhy(d){
+  const c=d.contrib;const items=[['Inercia (España)',c.inercia],['Francia',c.francia],['Alemania',c.alemania],['Temporada',c.estacional]];
+  const max=Math.max(1,...items.map(i=>Math.abs(i[1])));
+  $('whybars').innerHTML=items.map(([n,v])=>{
+    const w=Math.abs(v)/max*50;const up=v>=0;
+    return '<div class="factor"><span class="fn">'+n+'</span><div class="bartrack"><div class="barmid"></div><div class="barfill '+(up?'up':'down')+'" style="width:'+w+'%"></div></div><span class="fv '+(up?'up-t':'down-t')+'">'+scts(v)+'</span></div>';
   }).join('');
-  $('hist').innerHTML=rows;
-  drawChart(d.serie);
+  const fr=d.vecinos.francia_delta;
+  let txt='El modelo prevé <b>'+scts(d.delta_cts)+'</b> esta semana. ';
+  const drivers=[];
+  if(Math.abs(c.francia)>=0.2)drivers.push('Francia '+(fr>0?'subió':'bajó')+' '+fmt(Math.abs(fr),1)+' cts la semana pasada y arrastra a España');
+  if(Math.abs(c.estacional)>=0.2)drivers.push('la temporada '+(c.estacional>0?'empuja arriba':'tira abajo'));
+  if(Math.abs(c.inercia)>=0.2)drivers.push('la inercia del propio precio');
+  txt+= drivers.length?('Pesa sobre todo: '+drivers.join(', ')+'.'):'Sin fuerzas claras esta semana: precio plano.';
+  $('whysum').innerHTML=txt;
 }
+function renderEsc(d){
+  $('esc').innerHTML=d.escenarios.map(e=>'<div class="escrow"><div class="en">'+e.nombre+'<b>'+e.txt+'</b></div><div class="ev">'+fmt(e.valor)+' €</div></div>').join('');
+}
+function renderEvt(d){
+  $('eventos').innerHTML=d.eventos.map(e=>'<div class="evt"><div class="d">'+e.fecha+'</div><div><h3>'+e.titulo+'</h3><p>'+e.txt+'</p></div></div>').join('');
+}
+function renderHist(d){
+  $('hist').innerHTML=d.historial.slice(-12).reverse().map(r=>{
+    let real='<span class="pend">pendiente</span>',err='—';
+    if(r.real){real=fmt(r.real)+' €';const e=parseFloat(r.error);err='<span class="'+(e<=2?'hit':'')+'">'+r.error+' cts</span>';}
+    return '<tr><td>sem '+r.semana+'</td><td>'+fmt(r.pred)+' €</td><td>'+real+'</td><td>'+err+'</td></tr>';
+  }).join('');
+}
+
+/* charts */
 function drawChart(serie){
-  const host=$('chart');const W=host.clientWidth||560,H=200,mL=34,mR=10,mT=12,mB=20;
-  const vs=serie.map(p=>p.v);const vmin=Math.min(...vs)-0.05,vmax=Math.max(...vs)+0.05;
-  const N=serie.length;const X=i=>mL+(i/(N-1))*(W-mL-mR);const Y=v=>mT+(1-(v-vmin)/(vmax-vmin))*(H-mT-mB);
-  let g='';const ns='http://www.w3.org/2000/svg';
-  const svg=`<svg viewBox="0 0 ${W} ${H}">`;
-  let grid='';for(let k=0;k<=2;k++){const v=vmin+ (vmax-vmin)*k/2;const y=Y(v);
-    grid+=`<line x1="${mL}" y1="${y}" x2="${W-mR}" y2="${y}" stroke="var(--line)"/>`+
-          `<text x="${mL-6}" y="${y+3}" text-anchor="end" font-size="9" fill="var(--muted)">${fmt(v)}</text>`;}
-  let d='';serie.forEach((p,i)=>{d+=(i?'L':'M')+X(i).toFixed(1)+' '+Y(p.v).toFixed(1);});
-  let yr='';serie.forEach((p,i)=>{if(p.w===1){const x=X(i);yr+=`<text x="${x}" y="${H-6}" text-anchor="middle" font-size="9" fill="var(--muted)">${p.y}</text>`;}});
+  const host=$('chart');host.innerHTML='';const W=host.clientWidth||600,H=210,mL=34,mR=12,mT=12,mB=20;
+  const vs=serie.map(p=>p.v),vmin=Math.min(...vs)-0.05,vmax=Math.max(...vs)+0.05,N=serie.length;
+  const X=i=>mL+(i/(N-1))*(W-mL-mR),Y=v=>mT+(1-(v-vmin)/(vmax-vmin))*(H-mT-mB);
+  let g='';for(let k=0;k<=2;k++){const v=vmin+(vmax-vmin)*k/2,y=Y(v);g+='<line x1="'+mL+'" y1="'+y+'" x2="'+(W-mR)+'" y2="'+y+'" stroke="var(--line)"/><text x="'+(mL-6)+'" y="'+(y+3)+'" text-anchor="end" font-size="9" fill="var(--muted)">'+fmt(v)+'</text>';}
+  let yr='';serie.forEach((p,i)=>{if(p.w===1)yr+='<text x="'+X(i)+'" y="'+(H-6)+'" text-anchor="middle" font-size="9" fill="var(--muted)">'+p.y+'</text>';});
+  let path='';serie.forEach((p,i)=>path+=(i?'L':'M')+X(i).toFixed(1)+' '+Y(p.v).toFixed(1));
   const last=serie[N-1];
-  host.innerHTML=svg+grid+yr+`<path d="${d}" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linejoin="round"/>`+
-    `<circle cx="${X(N-1)}" cy="${Y(last.v)}" r="3.5" fill="var(--accent)"/>`+`</svg>`;
+  host.innerHTML='<svg viewBox="0 0 '+W+' '+H+'">'+g+yr+'<path d="'+path+'" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linejoin="round"/><circle cx="'+X(N-1)+'" cy="'+Y(last.v)+'" r="3.5" fill="var(--accent)"/><rect id="cov" x="'+mL+'" y="'+mT+'" width="'+(W-mL-mR)+'" height="'+(H-mT-mB)+'" fill="transparent"/><line id="ccr" x1="0" y1="'+mT+'" x2="0" y2="'+(H-mB)+'" stroke="var(--ink)" stroke-width="1" opacity="0"/><circle id="cdt" r="3.5" fill="var(--accent)" opacity="0"/></svg>';
+  let tip=host.querySelector('.ctip');if(!tip){tip=document.createElement('div');tip.className='ctip';host.appendChild(tip);}
+  const cov=host.querySelector('#cov'),cr=host.querySelector('#ccr'),dt=host.querySelector('#cdt');
+  cov.addEventListener('mousemove',ev=>{const bx=host.getBoundingClientRect(),px=(ev.clientX-bx.left)*(W/bx.width);let k=Math.round(((px-mL)/(W-mL-mR))*(N-1));k=Math.max(0,Math.min(N-1,k));const p=serie[k],x=X(k),y=Y(p.v);cr.setAttribute('x1',x);cr.setAttribute('x2',x);cr.setAttribute('opacity',.35);dt.setAttribute('cx',x);dt.setAttribute('cy',y);dt.setAttribute('opacity',1);tip.style.opacity=1;tip.style.left=(x/W*bx.width)+'px';tip.style.top=(y/H*bx.height)+'px';tip.innerHTML=fmt(p.v)+' € · sem '+p.w+'/'+p.y;});
+  cov.addEventListener('mouseleave',()=>{cr.setAttribute('opacity',0);dt.setAttribute('opacity',0);tip.style.opacity=0;});
+  cov.addEventListener('touchmove',ev=>{ev.preventDefault();const bx=host.getBoundingClientRect(),px=(ev.touches[0].clientX-bx.left)*(W/bx.width);let k=Math.round(((px-mL)/(W-mL-mR))*(N-1));k=Math.max(0,Math.min(N-1,k));const p=serie[k],x=X(k),y=Y(p.v);cr.setAttribute('x1',x);cr.setAttribute('x2',x);cr.setAttribute('opacity',.35);dt.setAttribute('cx',x);dt.setAttribute('cy',y);dt.setAttribute('opacity',1);tip.style.opacity=1;tip.style.left=(x/W*bx.width)+'px';tip.style.top=(y/H*bx.height)+'px';tip.innerHTML=fmt(p.v)+' € · sem '+p.w+'/'+p.y;},{passive:false});
 }
-async function tryUnlock(pw,fromStore){
-  try{
-    const d=await decryptData(window.ENC,pw);
-    try{localStorage.setItem('pw',pw);}catch(e){}
-    render(d);
-  }catch(e){
-    if(!fromStore){$('err').textContent='Contraseña incorrecta';}
-  }
+function drawComov(sp){
+  const host=$('comov');host.innerHTML='';const W=host.clientWidth||600,H=230,mL=32,mR=40,mT=12,mB=20;
+  const series=[['esp','España','var(--accent)'],['fra','Francia','var(--blue)'],['ale','Alemania','var(--dane)'],['din','Dinamarca','var(--good)']];
+  let all=[];series.forEach(s=>sp[s[0]].forEach(v=>{if(v!=null)all.push(v)}));
+  const lo=Math.floor((Math.min(...all)-6)/10)*10,hi=Math.ceil((Math.max(...all)+6)/10)*10,N=sp.labels.length;
+  const X=i=>mL+(i/(N-1))*(W-mL-mR),Y=v=>mT+(1-(v-lo)/(hi-lo))*(H-mT-mB);
+  let g='';for(let v=Math.ceil(lo/25)*25;v<=hi;v+=25){const y=Y(v);g+='<line x1="'+mL+'" y1="'+y+'" x2="'+(W-mR)+'" y2="'+y+'" stroke="'+(v===100?'var(--muted)':'var(--line)')+'" stroke-dasharray="'+(v===100?'':'3 3')+'"/><text x="'+(mL-6)+'" y="'+(y+3)+'" text-anchor="end" font-size="9" fill="var(--muted)">'+v+'</text>';}
+  let yr='';sp.labels.forEach((l,i)=>{if(l.w===1)yr+='<text x="'+X(i)+'" y="'+(H-5)+'" text-anchor="middle" font-size="9" fill="var(--muted)">'+l.y+'</text>';});
+  let lines='';series.forEach(s=>{const arr=sp[s[0]];let path='',st=false,lx=0,ly=0;arr.forEach((v,i)=>{if(v==null)return;const x=X(i),y=Y(v);path+=(st?'L':'M')+x.toFixed(1)+' '+y.toFixed(1);st=true;lx=x;ly=y;});lines+='<path d="'+path+'" fill="none" stroke="'+s[2]+'" stroke-width="'+(s[0]==='esp'?2.4:1.5)+'" opacity="'+(s[0]==='esp'?1:.8)+'" stroke-linejoin="round"/><text x="'+Math.min(lx+5,W-28)+'" y="'+(ly+3)+'" font-size="9.5" fill="'+s[2]+'" font-weight="600">'+s[1].slice(0,3)+'</text>';});
+  host.innerHTML='<svg viewBox="0 0 '+W+' '+H+'">'+g+yr+lines+'</svg>';
+  $('cc-leg').innerHTML=series.map(s=>'<span class="lg"><span class="sw" style="background:'+s[2]+'"></span>'+s[1]+'</span>').join('');
 }
-$('go').onclick=()=>tryUnlock($('pw').value.trim(),false);
-$('pw').addEventListener('keydown',e=>{if(e.key==='Enter')$('go').click();});
+
+/* ================= CHAT ================= */
+function botAnswer(q){
+  q=q.toLowerCase();const d=D;const P=d.prediccion,U=d.ultimo,c=d.contrib,fr=d.vecinos.francia_delta,al=d.vecinos.alemania_delta;
+  const rng=weekRange(P.y,P.w);
+  const has=(...w)=>w.some(x=>q.includes(x));
+  if(has('hola','buenas','ey','hey'))return '¡Hola! 👋 Soy el asistente del modelo. Pregúntame por la <b>predicción</b>, el <b>por qué</b>, si <b>vender o aguantar</b>, cómo van los <b>vecinos</b>, o si es <b>fiable</b>.';
+  if(has('vend','aguant','hago','decisi','compr'))return d.semaforo.estado+' → '+d.semaforo.txt;
+  if(has('por qu','porqu','razon','razón','explica','debe'))return whyText();
+  if(has('franc','aleman','vecin','chivat','pais','país'))return 'Los mercados van juntos, pero <b>Francia y Alemania se mueven ~1 semana antes</b> que España. Esta semana Francia '+(fr>0?'subió':fr<0?'bajó':'no se movió')+' <b>'+fmt(Math.abs(fr),1)+' cts</b> y Alemania '+(al>0?'subió':al<0?'bajó':'repitió')+' <b>'+fmt(Math.abs(al),1)+' cts</b> → por eso arrastran a España la semana que viene.';
+  if(has('fiab','acier','precis','funciona','confi','error'))return 'El modelo se equivoca de media <b>'+fmt(d.precision.modelo_cts,1)+' céntimos</b> y acierta dentro de 2 cts el <b>'+d.precision.within2+'%</b> de las semanas. Le gana a "copiar la semana anterior" (que falla '+fmt(d.precision.naive_cts,1)+' cts). <span class="mini">Y cada semana se contrasta con Mercolleida, mira la tabla de abajo.</span>';
+  if(has('china','ppa','peste','escenario','riesgo','pasa si'))return 'Escenarios: si <b>China reabre</b> o sube la demanda → hacia <b>'+fmt(d.escenarios[2].valor)+' €</b>. Si se <b>agrava la PPA</b> y cierran mercados → hacia <b>'+fmt(d.escenarios[1].valor)+' €</b>. Base del modelo: <b>'+fmt(d.escenarios[0].valor)+' €</b>. <span class="mini">Ilustrativo, no cerrado.</span>';
+  if(has('evento','densidad','juicio','ley','octubre','radar','arag'))return '📅 <b>'+d.eventos[0].titulo+' ('+d.eventos[0].fecha+')</b>: '+d.eventos[0].txt;
+  if(has('estacional','temporada','epoca','época','verano','enero','invierno','mes'))return 'El precio hace lo mismo cada año: <b>caro en julio</b> (+9% sobre la media) y <b>barato en enero</b> (−11%). El modelo lo tiene en cuenta: esta semana la temporada aporta <b>'+scts(c.estacional)+'</b>.';
+  if(has('hoy','fecha','que dia','qué día','semana','cuando','cuándo'))return 'Hoy estamos en la <b>semana '+isoWeek(new Date())+'</b>. La predicción es para la <b>semana '+P.w+'</b>, que va del <b>'+rng+'</b>.';
+  if(has('predic','precio','cuant','cuánt','esper','semana que viene','proxim','próxim','valdra','valdrá'))return 'Para la <b>semana '+P.w+' ('+rng+')</b> el modelo estima <b>'+fmt(P.v)+' €/kg</b> ('+scts(d.delta_cts)+' respecto al último real de '+fmt(U.v)+' €). <span class="mini">Estimación a 1 semana vista.</span>';
+  if(has('gracias','genial','crack','perfecto'))return '¡A mandar! 🐷 Cualquier cosa, aquí estoy.';
+  return 'No estoy seguro de eso 🤔. Prueba a preguntarme por: la <b>predicción</b>, el <b>por qué</b>, <b>vender o aguantar</b>, los <b>vecinos</b>, la <b>fiabilidad</b>, los <b>escenarios</b> o el <b>evento</b> del radar.';
+}
+function whyText(){const d=D,c=d.contrib;let parts=[];
+  if(Math.abs(c.francia)>=0.2)parts.push('<b>Francia</b> '+scts(c.francia));
+  if(Math.abs(c.estacional)>=0.2)parts.push('<b>temporada</b> '+scts(c.estacional));
+  if(Math.abs(c.inercia)>=0.2)parts.push('<b>inercia</b> '+scts(c.inercia));
+  if(Math.abs(c.alemania)>=0.2)parts.push('<b>Alemania</b> '+scts(c.alemania));
+  return 'El precio previsto ('+scts(d.delta_cts)+') sale de sumar: '+(parts.length?parts.join(' · '):'nada destacable, precio plano')+'. <span class="mini">Solo cuento lo que el modelo pesa de verdad — cero inventos.</span>';
+}
+const CHIPS=['¿Qué precio esperas?','¿Por qué?','¿Vendo o aguanto?','¿Cómo van los vecinos?','¿Es fiable?','¿Y si hay PPA o China?'];
+function initChat(){
+  $('chips').innerHTML=CHIPS.map(c=>'<button class="chip">'+c+'</button>').join('');
+  $('chips').querySelectorAll('.chip').forEach(b=>b.onclick=()=>ask(b.textContent));
+  $('csend').onclick=()=>{if($('cin').value.trim())ask($('cin').value.trim());};
+  $('cin').addEventListener('keydown',e=>{if(e.key==='Enter'&&$('cin').value.trim())ask($('cin').value.trim());});
+  if(!$('cbody').dataset.init){$('cbody').dataset.init='1';
+    setTimeout(()=>botSay('¡Hola! 👋 Soy tu asistente. La predicción de esta semana es <b>'+fmt(D.prediccion.v)+' €/kg</b>. Pregúntame lo que quieras o toca una opción de abajo.'),350);}
+}
+function ask(text){addBub(text,'me');$('cin').value='';setTimeout(()=>botSay(botAnswer(text)),260);}
+function addBub(html,cls){const b=document.createElement('div');b.className='bub '+cls;b.innerHTML=html;$('cbody').appendChild(b);$('cbody').scrollTop=$('cbody').scrollHeight;return b;}
+function botSay(html){const t=document.createElement('div');t.className='typing';t.innerHTML='<span></span><span></span><span></span>';$('cbody').appendChild(t);$('cbody').scrollTop=$('cbody').scrollHeight;
+  const delay=Math.min(1100,500+html.length*4);
+  setTimeout(()=>{t.remove();addBub(html,'bot');},delay);}
+
+/* gate */
 const EYE_OPEN='<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1.5 12S5.5 5 12 5s10.5 7 10.5 7-4 7-10.5 7S1.5 12 1.5 12z"/><circle cx="12" cy="12" r="3"/></svg>';
 const EYE_OFF='<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1.5 12S5.5 5 12 5s10.5 7 10.5 7-4 7-10.5 7S1.5 12 1.5 12z"/><circle cx="12" cy="12" r="3"/><line x1="3" y1="21" x2="21" y2="3" stroke="#E63A2E" stroke-width="2.6"/></svg>';
 $('eye').innerHTML=EYE_OFF;
 $('eye').onclick=()=>{const p=$('pw');const show=p.type==='password';p.type=show?'text':'password';$('eye').innerHTML=show?EYE_OPEN:EYE_OFF;p.focus();};
+async function tryUnlock(pw,fromStore){try{const d=await decryptData(window.ENC,pw);try{localStorage.setItem('pw',pw);}catch(e){}render(d);}catch(e){if(!fromStore)$('err').textContent='Contraseña incorrecta';}}
+$('go').onclick=()=>tryUnlock($('pw').value.trim(),false);
+$('pw').addEventListener('keydown',e=>{if(e.key==='Enter')$('go').click();});
 $('logout').onclick=()=>{try{localStorage.removeItem('pw');}catch(e){}location.reload();};
-window.addEventListener('resize',()=>{if(!$('app').hidden&&window.__d)drawChart(window.__d.serie);});
-// auto-unlock si ya la metió antes en este móvil
-(async()=>{let saved=null;try{saved=localStorage.getItem('pw');}catch(e){}
-  if(saved&&window.ENC){try{const d=await decryptData(window.ENC,saved);window.__d=d;render(d);}catch(e){}}})();
+window.addEventListener('resize',()=>{if(D){drawChart(D.serie);drawComov(D.serie_paises);}});
+(async()=>{let saved=null;try{saved=localStorage.getItem('pw');}catch(e){}if(saved&&window.ENC){try{const d=await decryptData(window.ENC,saved);render(d);}catch(e){}}})();
 </script>
 </body>
 </html>
