@@ -506,11 +506,11 @@ function buildEstado(){
 /* ===== HERRAMIENTAS del chat: calculadora exacta + gráficas de verdad ===== */
 const EXTRA_INSTR=`HERRAMIENTAS QUE PUEDES USAR (al usuario le encantan; úsalas cuando aporten, no las menciones si no hacen falta):
 
-1) CALCULADORA EXACTA — cuando hagas CUALQUIER cálculo (impacto en €, proyecciones, diferencias, medias), NO lo hagas de cabeza: escribe la operación en un bloque y el sistema la calcula exacta y la muestra. Notación de máquina (punto decimal, sin separador de miles):
+1) CALCULADORA EXACTA — cuando hagas CUALQUIER cálculo (impacto en €, proyecciones, diferencias, medias), NO lo hagas de cabeza: mete la operación en un bloque calc y el sistema la calcula exacta. REGLAS ESTRICTAS del bloque calc: UNA sola línea, SOLO números y signos + - * / ( ) . — NADA de texto, NADA de €, NADA de separador de miles (escribe 55000, no 55.000), NADA de "=", punto para decimales. El razonamiento va FUERA, en el texto normal. Ejemplo correcto:
 \`\`\`calc
-0.032*120*55000
+55000*120*0.032
 \`\`\`
-Puedes acompañarlo con una frase ("eso son unos 211.000 €").
+Y en el texto: "son unos 211.000 € que te juegas". Si necesitas varios cálculos, usa varios bloques calc de una línea cada uno.
 
 2) GRÁFICAS — cuando el usuario pida un dibujo, gráfica, evolución o comparación visual, incluye un bloque JSON con datos REALES del ESTADO (serie_precio, serie_paises, historial, contribuciones). Formato EXACTO (una sola línea de JSON válido):
 \`\`\`chart
@@ -519,10 +519,14 @@ Puedes acompañarlo con una frase ("eso son unos 211.000 €").
 - type: "line" (evolución) o "bar" (comparar pocas cosas).
 - Varias series para comparar países (usa serie_paises: espana/francia/alemania/dinamarca con sus etiquetas).
 - NUNCA inventes puntos: usa exactamente los números del ESTADO. Acompaña la gráfica con 1-2 frases de lectura.`;
-function safeCalc(expr){
-  const raw=String(expr||'').trim().replace(/,/g,'.').replace(/×/g,'*').replace(/÷/g,'/').replace(/\s+/g,'');
-  if(!raw||!/^[-0-9.+*/()%]+$/.test(raw))return null;
-  try{const v=Function('"use strict";return('+raw.replace(/%/g,'/100')+')')();return (typeof v==='number'&&isFinite(v))?v:null;}catch(_){return null;}
+function safeCalc(block){
+  const lines=String(block||'').split('\n').map(l=>l.trim()).filter(Boolean);
+  if(lines.length!==1)return null;                 // solo aceptamos una fórmula limpia de una línea
+  const shown=lines[0].replace(/=.*$/,'').trim();
+  if(!/[0-9]/.test(shown)||!/[-+*/×÷]/.test(shown))return null;
+  const e=shown.replace(/,/g,'.').replace(/×/g,'*').replace(/÷/g,'/').replace(/\s+/g,'');
+  if(!/^[-0-9.+*/()%]+$/.test(e))return null;
+  try{const v=Function('"use strict";return('+e.replace(/%/g,'/100')+')')();return (typeof v==='number'&&isFinite(v))?{expr:shown,val:v}:null;}catch(_){return null;}
 }
 function fmtCalc(n){const a=Math.abs(n);const dec=a>=1000?0:(a>=1?2:3);return n.toLocaleString('es-ES',{minimumFractionDigits:0,maximumFractionDigits:dec});}
 function chatChart(spec){
@@ -561,9 +565,9 @@ function addBotRich(raw){
       try{box.innerHTML=chatChart(JSON.parse(m[2].trim()));}catch(e){box.innerHTML='<div class="cct">(no pude dibujar la gráfica)</div>';}
       b.appendChild(box);
     }else{
-      const val=safeCalc(m[2]);const c=document.createElement('div');c.className='chatcalc';
-      c.innerHTML='🧮 <code>'+mdToHtml(m[2].trim().replace(/\*/g,'×').replace(/\//g,'÷'))+'</code> = <b>'+(val==null?'—':fmtCalc(val))+'</b>';
-      b.appendChild(c);
+      const r=safeCalc(m[2]);
+      if(r){const c=document.createElement('div');c.className='chatcalc';c.innerHTML='🧮 <code>'+mdToHtml(r.expr.replace(/\*/g,'×').replace(/\//g,'÷'))+'</code> = <b>'+fmtCalc(r.val)+'</b>';b.appendChild(c);}
+      else{const d=document.createElement('div');d.innerHTML=mdToHtml(m[2].trim());b.appendChild(d);}
     }
     last=re.lastIndex;
   }
@@ -571,7 +575,7 @@ function addBotRich(raw){
   if(!b.childNodes.length)b.innerHTML=mdToHtml(raw);
   $('cbody').appendChild(b);$('cbody').scrollTop=$('cbody').scrollHeight;return b;
 }
-function cleanForLog(raw){return String(raw).replace(/```chart[\s\S]*?```/gi,'[gráfica mostrada]').replace(/```calc\s*([\s\S]*?)```/gi,(_,e)=>{const v=safeCalc(e);return e.trim()+(v!=null?(' = '+fmtCalc(v)):'');}).replace(/\s+/g,' ').trim();}
+function cleanForLog(raw){return String(raw).replace(/```chart[\s\S]*?```/gi,'[gráfica mostrada]').replace(/```calc\s*([\s\S]*?)```/gi,(_,e)=>{const r=safeCalc(e);return r?(r.expr+' = '+fmtCalc(r.val)):e.trim();}).replace(/\s+/g,' ').trim();}
 let CHATLOG=[];                              // hilo en texto plano {role,content}
 let sending=false;
 function pushLog(role,content){CHATLOG.push({role,content});if(CHATLOG.length>12)CHATLOG=CHATLOG.slice(-12);}
