@@ -491,26 +491,33 @@ function buildEstado(){
     };
   }catch(e){return {};}
 }
+let CHATLOG=[];                              // hilo en texto plano {role,content}
+let sending=false;
+function pushLog(role,content){CHATLOG.push({role,content});if(CHATLOG.length>12)CHATLOG=CHATLOG.slice(-12);}
+function stripTags(h){const d=document.createElement('div');d.innerHTML=h;return (d.textContent||'').trim();}
 async function ask(text){
-  addBub(text,'me');$('cin').value='';
-  const t=showTyping();
-  // 1) intento local rápido: solo saludos/gracias muy claros → gratis e instantáneo
-  let best={id:null,s:-1};try{best=await routeScored(text);}catch(e){}
-  if(best.id&&QUICK[best.id]&&best.s>=0.6){
-    const ans=A[best.id]();
-    setTimeout(()=>{t.remove();addBub(ans,'bot');},Math.min(700,360+ans.length*3));
-    return;
-  }
-  // 2) cerebro Claude con los números reales del modelo
-  let ans=null;
+  text=(text||'').trim();if(!text||sending)return;   // evita doble envío
+  sending=true;$('csend').disabled=true;
   try{
-    const resp=await fetch(WORKER,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pregunta:text,usuario:chatUser(),estado:buildEstado()})});
-    const data=await resp.json();
-    if(data&&data.respuesta){ans=mdToHtml(data.respuesta);setChatStatus('● IA Claude · datos de hoy');}
-  }catch(e){}
-  // 3) si la IA no responde, cae al motor local (nunca se queda mudo)
-  if(!ans){try{ans=await route(text);}catch(e){ans='Uf, ahora mismo no puedo conectar con la IA 🤔. Prueba otra vez en un momento.';}}
-  t.remove();addBub(ans,'bot');
+    addBub(text,'me');$('cin').value='';pushLog('user',text);
+    const t=showTyping();
+    // 1) local rápido: solo saludos/gracias muy claros → gratis e instantáneo
+    let best={id:null,s:-1};try{best=await routeScored(text);}catch(e){}
+    if(best.id&&QUICK[best.id]&&best.s>=0.6){
+      const html=A[best.id]();
+      t.remove();addBub(html,'bot');pushLog('assistant',stripTags(html));
+      return;
+    }
+    // 2) cerebro Claude CON el hilo de la conversación y los números reales
+    let ansText=null;
+    try{
+      const resp=await fetch(WORKER,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({mensajes:CHATLOG.slice(-8),usuario:chatUser(),estado:buildEstado()})});
+      const data=await resp.json();
+      if(data&&data.respuesta)ansText=data.respuesta;
+    }catch(e){}
+    if(ansText){setChatStatus('● IA Claude · datos de hoy');t.remove();addBub(mdToHtml(ansText),'bot');pushLog('assistant',ansText);}
+    else{let fb;try{fb=await route(text);}catch(e){fb='Uf, ahora mismo no puedo conectar con la IA 🤔. Prueba otra vez en un momento.';}t.remove();addBub(fb,'bot');pushLog('assistant',stripTags(fb));}
+  }finally{sending=false;$('csend').disabled=false;}
 }
 
 /* gate */
