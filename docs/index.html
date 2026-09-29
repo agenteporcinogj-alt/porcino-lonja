@@ -147,6 +147,14 @@ td:first-child,th:first-child{text-align:left}
 .chat-input button{border:0;border-radius:50%;width:42px;height:42px;background:var(--accent);color:#fff;font-size:1.1rem;cursor:pointer;flex:none}
 .chat-input button:disabled{opacity:.5;cursor:default}
 .btag{display:inline-block;margin-left:7px;padding:1px 7px;border-radius:10px;background:var(--surface2);border:1px solid var(--line);color:var(--muted);font-size:.66rem;font-weight:600;vertical-align:middle;font-family:inherit}
+.gtip{position:absolute;pointer-events:none;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:7px 10px;font-size:.78rem;line-height:1.4;color:var(--ink);box-shadow:0 6px 20px rgba(0,0,0,.35);max-width:230px;opacity:0;transform:translate(-50%,-108%);transition:opacity .12s;z-index:9;white-space:normal}
+.gtip b{color:var(--accent)}
+#whybars{position:relative}
+#whybars svg{width:100%;height:auto;display:block}
+#whybars .wrow{cursor:pointer}
+#comov{position:relative}
+.legend .lg{cursor:pointer;user-select:none;opacity:1;transition:opacity .15s}
+.legend .lg.off{opacity:.35;text-decoration:line-through}
 #diario .drow{display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding:7px 0;border-bottom:1px solid var(--line)}
 #diario .drow:last-child{border-bottom:0}
 #diario .dk{color:var(--muted);font-size:.9rem}
@@ -226,7 +234,7 @@ footer a{color:var(--accent);cursor:pointer}
   <!-- POR QUE -->
   <section class="rise">
     <h2>¿Por qué ese precio?</h2>
-    <p class="slab">Lo que empuja el precio de la semana que viene, en céntimos. Verde sube, rojo baja.</p>
+    <p class="slab">Cada fuerza suma o resta céntimos al precio de la semana que viene. Todas juntas dan el total. <b>Toca o pasa el dedo</b> por cada barra para ver qué significa. 🟢 sube · 🔴 baja.</p>
     <div class="panel">
       <p class="why-sum" id="whysum"></p>
       <div id="whybars"></div>
@@ -236,7 +244,7 @@ footer a{color:var(--accent);cursor:pointer}
   <!-- CHIVATOS -->
   <section class="rise">
     <h2>Los vecinos (chivatos)</h2>
-    <p class="slab">Francia y Alemania se mueven ~1 semana antes que España. Mismos días, puestos a la misma altura de salida.</p>
+    <p class="slab">Francia y Alemania suelen moverse <b>~1 semana antes</b> que España, por eso avisan. Aquí <b>cada país arranca en 100</b>: si su línea sube a 110 es que ha subido un <b>10%</b> desde el inicio (no son €, es para comparar quién se mueve antes). <b>Pasa el dedo</b> para ver los valores · <b>toca un país en la leyenda</b> para ocultarlo.</p>
     <div class="chartcard">
       <div class="legend" id="cc-leg"></div>
       <div id="comov"></div>
@@ -334,20 +342,66 @@ function animateNum(el,target,dec){dec=dec||2;let cur=0;const t0=performance.now
   requestAnimationFrame(step);}
 
 function renderWhy(d){
-  const c=d.contrib;const items=[['Inercia (España)',c.inercia],['Francia',c.francia],['Alemania',c.alemania],['Temporada',c.estacional]];
-  const max=Math.max(1,...items.map(i=>Math.abs(i[1])));
-  $('whybars').innerHTML=items.map(([n,v])=>{
-    const w=Math.abs(v)/max*50;const up=v>=0;
-    return '<div class="factor"><span class="fn">'+n+'</span><div class="bartrack"><div class="barmid"></div><div class="barfill '+(up?'up':'down')+'" style="width:'+w+'%"></div></div><span class="fv '+(up?'up-t':'down-t')+'">'+scts(v)+'</span></div>';
-  }).join('');
-  const fr=d.vecinos.francia_delta;
-  let txt='El modelo prevé <b>'+scts(d.delta_cts)+'</b> esta semana. ';
-  const drivers=[];
-  if(Math.abs(c.francia)>=0.2)drivers.push('Francia '+(fr>0?'subió':'bajó')+' '+fmt(Math.abs(fr),1)+' cts la semana pasada y arrastra a España');
-  if(Math.abs(c.estacional)>=0.2)drivers.push('la temporada '+(c.estacional>0?'empuja arriba':'tira abajo'));
-  if(Math.abs(c.inercia)>=0.2)drivers.push('la inercia del propio precio');
-  txt+= drivers.length?('Pesa sobre todo: '+drivers.join(', ')+'.'):'Sin fuerzas claras esta semana: precio plano.';
-  $('whysum').innerHTML=txt;
+  const c=d.contrib,fr=d.vecinos.francia_delta,al=d.vecinos.alemania_delta,total=Math.round(d.delta_cts*10)/10;
+  // resumen en cristiano
+  let sum='El modelo prevé <b>'+scts(d.delta_cts)+'</b> para la semana que viene, y sale de sumar estas fuerzas: ';
+  const dr=[];
+  if(Math.abs(c.francia)>=0.2)dr.push('Francia '+(fr>0?'subió':'bajó')+' '+fmt(Math.abs(fr),1)+' cts y arrastra a España');
+  if(Math.abs(c.alemania)>=0.2)dr.push('Alemania '+(al>0?'subió':'bajó')+' '+fmt(Math.abs(al),1)+' cts');
+  if(Math.abs(c.estacional)>=0.2)dr.push('la época del año '+(c.estacional>0?'empuja arriba':'tira abajo'));
+  if(Math.abs(c.inercia)>=0.2)dr.push('el propio precio traía inercia');
+  sum+= dr.length?(dr.join(', ')+'.'):'ninguna con fuerza: precio plano.';
+  $('whysum').innerHTML=sum;
+  // datos de la cascada
+  const facts=[
+    {n:'Precio España',ic:'📉',v:c.inercia,exp:'<b>Inercia del propio precio.</b> España venía moviéndose, y ese impulso se mantiene un poco la semana siguiente.'},
+    {n:'Francia',ic:'🇫🇷',v:c.francia,exp:'<b>Francia va ~1 semana por delante.</b> '+(fr>0?'Subió ':'Bajó ')+fmt(Math.abs(fr),1)+' cts la semana pasada → tira de España '+scts(c.francia)+'.'},
+    {n:'Alemania',ic:'🇩🇪',v:c.alemania,exp:'<b>Alemania también adelanta a España.</b> '+(al>0?'Subió ':'Bajó ')+fmt(Math.abs(al),1)+' cts la semana pasada → aporta '+scts(c.alemania)+'.'},
+    {n:'Época del año',ic:'📅',v:c.estacional,exp:'<b>Estacionalidad.</b> Por estas fechas el precio, según el histórico de muchos años, suele '+(c.estacional>0?'subir':'bajar')+' → '+scts(c.estacional)+'.'}
+  ];
+  // cascada: cada barra empieza donde acabó la anterior; la última (TOTAL) va de 0 al total
+  const host=$('whybars');host.innerHTML='';
+  let cum=0;const steps=facts.map(f=>{const from=cum;cum=Math.round((cum+f.v)*10)/10;return {...f,from,to:cum};});
+  const vals=[0,total].concat(steps.flatMap(s=>[s.from,s.to]));
+  let dmin=Math.min(...vals),dmax=Math.max(...vals);const pad=Math.max(0.4,(dmax-dmin)*0.12);dmin-=pad;dmax+=pad;
+  const W=460,labelW=132,valW=54,rowH=46,mT=6,mB=6;
+  const rows=steps.length+1;const H=mT+rows*rowH+mB;
+  const ax0=labelW,ax1=W-valW;const X=v=>ax0+(v-dmin)/(dmax-dmin)*(ax1-ax0);
+  const zx=X(0);
+  const RED='#E0655B',GREEN='#3fae6b';
+  let svg='<line x1="'+zx.toFixed(1)+'" y1="'+mT+'" x2="'+zx.toFixed(1)+'" y2="'+(H-mB)+'" stroke="var(--muted)" stroke-dasharray="2 3" opacity=".6"/>';
+  svg+='<text x="'+zx.toFixed(1)+'" y="'+(H-mB+0)+'" text-anchor="middle" font-size="8.5" fill="var(--muted)">0</text>';
+  const bh=17;
+  steps.forEach((s,i)=>{
+    const ry=mT+i*rowH,cy=ry+rowH/2;const col=s.v>=0?GREEN:RED;
+    const xa=X(Math.min(s.from,s.to)),xb=X(Math.max(s.from,s.to));const bw=Math.max(3,xb-xa);
+    svg+='<text x="6" y="'+(cy-3).toFixed(1)+'" font-size="12" fill="var(--ink)">'+s.ic+'</text>';
+    svg+='<text x="26" y="'+(cy-1).toFixed(1)+'" font-size="11.5" fill="var(--muted)">'+s.n+'</text>';
+    svg+='<rect x="'+xa.toFixed(1)+'" y="'+(cy-bh/2).toFixed(1)+'" width="'+bw.toFixed(1)+'" height="'+bh+'" rx="4" fill="'+col+'"/>';
+    const dir=s.v>0?'▲':s.v<0?'▼':'';
+    svg+='<text x="'+(W-6)+'" y="'+(cy+3).toFixed(1)+'" text-anchor="end" font-size="11.5" font-weight="700" fill="'+col+'">'+dir+' '+scts(s.v).replace('+','+').replace('-','−')+'</text>';
+    if(i<steps.length){const ny=mT+(i+1)*rowH+rowH/2;svg+='<line x1="'+X(s.to).toFixed(1)+'" y1="'+(cy+bh/2).toFixed(1)+'" x2="'+X(s.to).toFixed(1)+'" y2="'+(ny-bh/2).toFixed(1)+'" stroke="var(--line)" stroke-dasharray="2 2"/>';}
+    svg+='<rect class="wrow" data-i="'+i+'" x="0" y="'+ry+'" width="'+W+'" height="'+rowH+'" fill="transparent"/>';
+  });
+  // fila TOTAL
+  const ty=mT+steps.length*rowH,tcy=ty+rowH/2;const tcol=total>=0?GREEN:RED;
+  const txa=X(Math.min(0,total)),txb=X(Math.max(0,total));
+  svg+='<text x="6" y="'+(tcy-1).toFixed(1)+'" font-size="11.5" font-weight="700" fill="var(--ink)">TOTAL</text>';
+  svg+='<rect x="'+txa.toFixed(1)+'" y="'+(tcy-bh/2-2).toFixed(1)+'" width="'+Math.max(3,txb-txa).toFixed(1)+'" height="'+(bh+4)+'" rx="4" fill="'+tcol+'"/>';
+  svg+='<text x="'+(W-6)+'" y="'+(tcy+3).toFixed(1)+'" text-anchor="end" font-size="12.5" font-weight="800" fill="'+tcol+'">'+(total>0?'▲':total<0?'▼':'')+' '+scts(total).replace('-','−')+'</text>';
+  host.innerHTML='<svg viewBox="0 0 '+W+' '+H+'">'+svg+'</svg>';
+  // tooltip interactivo
+  let tip=host.querySelector('.gtip');if(!tip){tip=document.createElement('div');tip.className='gtip';host.appendChild(tip);}
+  host.querySelectorAll('.wrow').forEach(rc=>{
+    const show=ev=>{const s=steps[+rc.dataset.i];const bx=host.getBoundingClientRect(),rr=rc.getBoundingClientRect();const p=ev.touches?ev.touches[0]:ev;
+      tip.innerHTML=s.ic+' <b>'+s.n+'</b> · '+scts(s.v)+'<br>'+s.exp;tip.style.opacity=1;
+      tip.style.left=Math.max(100,Math.min(bx.width-100,(p.clientX-bx.left)))+'px';
+      tip.style.top=(rr.top-bx.top+rr.height*0.5)+'px';};
+    rc.addEventListener('mouseenter',show);rc.addEventListener('mousemove',show);
+    rc.addEventListener('mouseleave',()=>{tip.style.opacity=0;});
+    rc.addEventListener('touchstart',e=>{show(e);},{passive:true});
+    rc.addEventListener('touchend',()=>{setTimeout(()=>{tip.style.opacity=0;},2200);},{passive:true});
+  });
 }
 function renderEsc(d){
   $('esc').innerHTML=d.escenarios.map(e=>'<div class="escrow"><div class="en">'+e.nombre+'<b>'+e.txt+'</b></div><div class="ev">'+fmt(e.valor)+' €</div></div>').join('');
@@ -404,17 +458,35 @@ function drawChart(serie){
   cov.addEventListener('mouseleave',()=>{cr.setAttribute('opacity',0);dt.setAttribute('opacity',0);tip.style.opacity=0;});
   cov.addEventListener('touchmove',ev=>{ev.preventDefault();const bx=host.getBoundingClientRect(),px=(ev.touches[0].clientX-bx.left)*(W/bx.width);let k=Math.round(((px-mL)/(W-mL-mR))*(N-1));k=Math.max(0,Math.min(N-1,k));const p=serie[k],x=X(k),y=Y(p.v);cr.setAttribute('x1',x);cr.setAttribute('x2',x);cr.setAttribute('opacity',.35);dt.setAttribute('cx',x);dt.setAttribute('cy',y);dt.setAttribute('opacity',1);tip.style.opacity=1;tip.style.left=(x/W*bx.width)+'px';tip.style.top=(y/H*bx.height)+'px';tip.innerHTML=fmt(p.v)+' € · sem '+p.w+'/'+p.y;},{passive:false});
 }
+let COMOV_SP=null;const COMOV_HIDE={};
+const COMOV_SER=[['esp','España','#E0655B','🔴'],['fra','Francia','#5b8def','🔵'],['ale','Alemania','#e0b23b','🟡'],['din','Dinamarca','#3fae6b','🟢']];
 function drawComov(sp){
-  const host=$('comov');host.innerHTML='';const W=host.clientWidth||600,H=230,mL=32,mR=40,mT=12,mB=20;
-  const series=[['esp','España','var(--accent)'],['fra','Francia','var(--blue)'],['ale','Alemania','var(--dane)'],['din','Dinamarca','var(--good)']];
-  let all=[];series.forEach(s=>sp[s[0]].forEach(v=>{if(v!=null)all.push(v)}));
+  if(sp)COMOV_SP=sp;sp=COMOV_SP;if(!sp)return;
+  const host=$('comov');host.innerHTML='';const W=host.clientWidth||600,H=240,mL=40,mR=42,mT=14,mB=22;
+  let all=[];COMOV_SER.forEach(s=>sp[s[0]].forEach(v=>{if(v!=null)all.push(v)}));
   const lo=Math.floor((Math.min(...all)-6)/10)*10,hi=Math.ceil((Math.max(...all)+6)/10)*10,N=sp.labels.length;
   const X=i=>mL+(i/(N-1))*(W-mL-mR),Y=v=>mT+(1-(v-lo)/(hi-lo))*(H-mT-mB);
-  let g='';for(let v=Math.ceil(lo/25)*25;v<=hi;v+=25){const y=Y(v);g+='<line x1="'+mL+'" y1="'+y+'" x2="'+(W-mR)+'" y2="'+y+'" stroke="'+(v===100?'var(--muted)':'var(--line)')+'" stroke-dasharray="'+(v===100?'':'3 3')+'"/><text x="'+(mL-6)+'" y="'+(y+3)+'" text-anchor="end" font-size="9" fill="var(--muted)">'+v+'</text>';}
-  let yr='';sp.labels.forEach((l,i)=>{if(l.w===1)yr+='<text x="'+X(i)+'" y="'+(H-5)+'" text-anchor="middle" font-size="9" fill="var(--muted)">'+l.y+'</text>';});
-  let lines='';series.forEach(s=>{const arr=sp[s[0]];let path='',st=false,lx=0,ly=0;arr.forEach((v,i)=>{if(v==null)return;const x=X(i),y=Y(v);path+=(st?'L':'M')+x.toFixed(1)+' '+y.toFixed(1);st=true;lx=x;ly=y;});lines+='<path d="'+path+'" fill="none" stroke="'+s[2]+'" stroke-width="'+(s[0]==='esp'?2.4:1.5)+'" opacity="'+(s[0]==='esp'?1:.8)+'" stroke-linejoin="round"/><text x="'+Math.min(lx+5,W-28)+'" y="'+(ly+3)+'" font-size="9.5" fill="'+s[2]+'" font-weight="600">'+s[1].slice(0,3)+'</text>';});
-  host.innerHTML='<svg viewBox="0 0 '+W+' '+H+'">'+g+yr+lines+'</svg>';
-  $('cc-leg').innerHTML=series.map(s=>'<span class="lg"><span class="sw" style="background:'+s[2]+'"></span>'+s[1]+'</span>').join('');
+  let g='';for(let v=Math.ceil(lo/25)*25;v<=hi;v+=25){const y=Y(v);const is100=v===100;
+    g+='<line x1="'+mL+'" y1="'+y+'" x2="'+(W-mR)+'" y2="'+y+'" stroke="'+(is100?'var(--muted)':'var(--line)')+'" stroke-dasharray="'+(is100?'':'3 3')+'"/>';
+    g+='<text x="'+(mL-6)+'" y="'+(y+3)+'" text-anchor="end" font-size="9" fill="var(--muted)">'+v+(is100?'':'')+'</text>';}
+  g+='<text x="'+mL+'" y="'+(Y(100)-4)+'" font-size="8.5" fill="var(--muted)">100 = punto de partida</text>';
+  let yr='';sp.labels.forEach((l,i)=>{if(l.w===1)yr+='<text x="'+X(i)+'" y="'+(H-6)+'" text-anchor="middle" font-size="9" fill="var(--muted)">'+l.y+'</text>';});
+  let lines='';COMOV_SER.forEach(s=>{if(COMOV_HIDE[s[0]])return;const arr=sp[s[0]];let path='',st=false,lx=0,ly=0;arr.forEach((v,i)=>{if(v==null)return;const x=X(i),y=Y(v);path+=(st?'L':'M')+x.toFixed(1)+' '+y.toFixed(1);st=true;lx=x;ly=y;});const esp=s[0]==='esp';lines+='<path d="'+path+'" fill="none" stroke="'+s[2]+'" stroke-width="'+(esp?2.6:1.6)+'" opacity="'+(esp?1:.85)+'" stroke-linejoin="round"/><text x="'+Math.min(lx+5,W-28)+'" y="'+(ly+3)+'" font-size="9.5" fill="'+s[2]+'" font-weight="700">'+s[1].slice(0,3)+'</text>';});
+  host.innerHTML='<svg viewBox="0 0 '+W+' '+H+'">'+g+yr+lines
+    +'<line id="cvcr" x1="0" y1="'+mT+'" x2="0" y2="'+(H-mB)+'" stroke="var(--ink)" stroke-width="1" opacity="0"/>'
+    +'<rect id="cvcov" x="'+mL+'" y="'+mT+'" width="'+(W-mL-mR)+'" height="'+(H-mT-mB)+'" fill="transparent"/></svg>';
+  let tip=host.querySelector('.gtip');if(!tip){tip=document.createElement('div');tip.className='gtip';host.appendChild(tip);}
+  const cr=host.querySelector('#cvcr'),cov=host.querySelector('#cvcov');
+  const move=ev=>{const bx=host.getBoundingClientRect();const p=ev.touches?ev.touches[0]:ev;const px=(p.clientX-bx.left)*(W/bx.width);
+    let k=Math.round(((px-mL)/(W-mL-mR))*(N-1));k=Math.max(0,Math.min(N-1,k));const x=X(k);
+    cr.setAttribute('x1',x);cr.setAttribute('x2',x);cr.setAttribute('opacity',.3);
+    const l=sp.labels[k];let html='<b>sem '+l.w+'/'+String(l.y).slice(2)+'</b>';
+    COMOV_SER.forEach(s=>{if(COMOV_HIDE[s[0]])return;const v=sp[s[0]][k];if(v!=null)html+='<br>'+s[3]+' '+s[1]+': <b>'+Math.round(v)+'</b>';});
+    tip.innerHTML=html;tip.style.opacity=1;tip.style.left=Math.max(100,Math.min(bx.width-100,(p.clientX-bx.left)))+'px';tip.style.top=(mT/H*bx.height+8)+'px';};
+  cov.addEventListener('mousemove',move);cov.addEventListener('mouseleave',()=>{cr.setAttribute('opacity',0);tip.style.opacity=0;});
+  cov.addEventListener('touchstart',move,{passive:true});cov.addEventListener('touchmove',e=>{e.preventDefault();move(e);},{passive:false});
+  $('cc-leg').innerHTML=COMOV_SER.map(s=>'<span class="lg'+(COMOV_HIDE[s[0]]?' off':'')+'" data-k="'+s[0]+'"><span class="sw" style="background:'+s[2]+'"></span>'+s[1]+'</span>').join('');
+  $('cc-leg').querySelectorAll('.lg').forEach(el=>el.onclick=()=>{const k=el.dataset.k;const vis=COMOV_SER.filter(s=>!COMOV_HIDE[s[0]]);if(!COMOV_HIDE[k]&&vis.length<=1)return;COMOV_HIDE[k]=!COMOV_HIDE[k];drawComov();});
 }
 
 /* ================= CHAT: motor híbrido (léxico + IA semántica) ================= */
