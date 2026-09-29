@@ -365,18 +365,20 @@ function renderDiario(d){
   const el=$('diario');if(!el)return;
   const g=d.diario;
   if(!g||(!g.ts&&g.pdfs_nuevos==null)){el.innerHTML='<span class="slab">El cartero aún no ha dejado registro de su última pasada. Aparecerá aquí en cuanto corra.</span>';return;}
-  const lat=g.lat||{};const cv=x=>(x==null?'—':fmt(x,3)+' €');
+  const lat=g.lat||{};
+  const price=x=>(typeof x==='number'&&x>0.4&&x<4)?(fmt(x,3)+' €'):null;   // solo €/kg creíbles
   let rows='';
   rows+='<div class="drow"><span class="dk">🕐 Última pasada</span><span class="dv">'+(g.ts||'—')+'</span></div>';
   rows+='<div class="drow"><span class="dk">📥 PDFs nuevos leídos</span><span class="dv">'+(g.pdfs_nuevos!=null?g.pdfs_nuevos:'—')+'</span></div>';
   const nuevas=g.nuevas||[];
   rows+='<div class="drow"><span class="dk">🆕 Semanas nuevas al modelo</span><span class="dv">'+(nuevas.length?('sem '+nuevas.join(', ')):'ninguna')+'</span></div>';
   if(lat.sem!=null){
-    rows+='<div class="dsep">Lo leído en el informe (semana '+lat.sem+'):</div>';
-    rows+='<div class="drow"><span class="dk">🐷 Cerdo cebado (Lleida)</span><span class="dv">'+cv(lat.cebado)+'</span></div>';
-    rows+='<div class="drow"><span class="dk">🇫🇷 Francia</span><span class="dv">'+cv(lat.fra)+'</span></div>';
-    rows+='<div class="drow"><span class="dk">🇩🇪 Alemania</span><span class="dv">'+cv(lat.ale)+'</span></div>';
-    rows+='<div class="drow"><span class="dk">🇩🇰 Dinamarca</span><span class="dv">'+cv(lat.din)+'</span></div>';
+    const filas=[['🐷 Cerdo cebado (Lleida)',lat.cebado],['🇫🇷 Francia',lat.fra],['🇩🇪 Alemania',lat.ale]]
+      .map(([n,v])=>[n,price(v)]).filter(([n,v])=>v);
+    if(filas.length){
+      rows+='<div class="dsep">Precios leídos en el informe (semana '+lat.sem+'):</div>';
+      rows+=filas.map(([n,v])=>'<div class="drow"><span class="dk">'+n+'</span><span class="dv">'+v+'</span></div>').join('');
+    }
   }
   if(!nuevas.length)rows+='<div class="dnote">No añadió semanas porque el precio real que trae el informe ya lo teníamos. El precio nuevo de la Lonja se fija los jueves.</div>';
   if(g.nombres&&g.nombres.length)rows+='<div class="dnote">Archivos: '+g.nombres.map(n=>String(n)).join(', ')+(g.pdfs_nuevos>g.nombres.length?' …':'')+'</div>';
