@@ -146,6 +146,12 @@ td:first-child,th:first-child{text-align:left}
 .chat-input input:focus{outline:2px solid var(--accent)}
 .chat-input button{border:0;border-radius:50%;width:42px;height:42px;background:var(--accent);color:#fff;font-size:1.1rem;cursor:pointer;flex:none}
 .chat-input button:disabled{opacity:.5;cursor:default}
+#diario .drow{display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding:7px 0;border-bottom:1px solid var(--line)}
+#diario .drow:last-child{border-bottom:0}
+#diario .dk{color:var(--muted);font-size:.9rem}
+#diario .dv{font-weight:600;font-family:"IBM Plex Mono",monospace;font-size:.92rem;text-align:right}
+#diario .dsep{margin:11px 0 3px;font-size:.82rem;font-weight:600;color:var(--accent)}
+#diario .dnote{margin-top:10px;font-size:.8rem;color:var(--muted);line-height:1.45;word-break:break-word}
 .bub .chatchart{margin:9px 0 4px;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:9px 9px 5px}
 .bub .chatchart .cct{font-size:.82rem;font-weight:600;color:var(--ink);margin:0 2px 6px}
 .bub .chatchart svg{width:100%;height:auto;display:block}
@@ -275,6 +281,13 @@ footer a{color:var(--accent);cursor:pointer}
     </div>
   </section>
 
+  <!-- DIARIO DEL CARTERO -->
+  <section class="rise">
+    <h2>📄 Última lectura del cartero</h2>
+    <p class="slab">Qué ha leído el bot la última vez que entró al correo. Transparencia total.</p>
+    <div class="chartcard" id="diario" style="padding:14px 16px"></div>
+  </section>
+
   <footer>Datos: Mercolleida (cotización semanal, jueves) · Actualización automática L-V · <a id="logout">cerrar sesión</a></footer>
 </div>
 
@@ -319,7 +332,7 @@ function render(d){
   const dl=d.delta_cts;$('delta').innerHTML='<span class="'+(dl>0?'up-t':dl<0?'down-t':'')+'">'+(dl>0?'▲':dl<0?'▼':'▬')+' '+scts(dl)+' vs la semana pasada</span>';
   $('lastv').textContent=fmt(d.ultimo.v,3);$('lastw').textContent='semana '+d.ultimo.w+' · '+d.ultimo.y;
   $('prec').textContent=fmt(d.precision.modelo_cts,1);$('within').textContent=d.precision.within2;
-  renderWhy(d);renderEsc(d);renderEvt(d);renderHist(d);drawChart(d.serie);drawComov(d.serie_paises);
+  renderWhy(d);renderEsc(d);renderEvt(d);renderHist(d);renderDiario(d);drawChart(d.serie);drawComov(d.serie_paises);
   initChat();
 }
 function animateNum(el,target,dec){dec=dec||2;let cur=0;const t0=performance.now();
@@ -347,6 +360,27 @@ function renderEsc(d){
 }
 function renderEvt(d){
   $('eventos').innerHTML=d.eventos.map(e=>'<div class="evt"><div class="d">'+e.fecha+'</div><div><h3>'+e.titulo+'</h3><p>'+e.txt+'</p></div></div>').join('');
+}
+function renderDiario(d){
+  const el=$('diario');if(!el)return;
+  const g=d.diario;
+  if(!g||(!g.ts&&g.pdfs_nuevos==null)){el.innerHTML='<span class="slab">El cartero aún no ha dejado registro de su última pasada. Aparecerá aquí en cuanto corra.</span>';return;}
+  const lat=g.lat||{};const cv=x=>(x==null?'—':fmt(x,3)+' €');
+  let rows='';
+  rows+='<div class="drow"><span class="dk">🕐 Última pasada</span><span class="dv">'+(g.ts||'—')+'</span></div>';
+  rows+='<div class="drow"><span class="dk">📥 PDFs nuevos leídos</span><span class="dv">'+(g.pdfs_nuevos!=null?g.pdfs_nuevos:'—')+'</span></div>';
+  const nuevas=g.nuevas||[];
+  rows+='<div class="drow"><span class="dk">🆕 Semanas nuevas al modelo</span><span class="dv">'+(nuevas.length?('sem '+nuevas.join(', ')):'ninguna')+'</span></div>';
+  if(lat.sem!=null){
+    rows+='<div class="dsep">Lo leído en el informe (semana '+lat.sem+'):</div>';
+    rows+='<div class="drow"><span class="dk">🐷 Cerdo cebado (Lleida)</span><span class="dv">'+cv(lat.cebado)+'</span></div>';
+    rows+='<div class="drow"><span class="dk">🇫🇷 Francia</span><span class="dv">'+cv(lat.fra)+'</span></div>';
+    rows+='<div class="drow"><span class="dk">🇩🇪 Alemania</span><span class="dv">'+cv(lat.ale)+'</span></div>';
+    rows+='<div class="drow"><span class="dk">🇩🇰 Dinamarca</span><span class="dv">'+cv(lat.din)+'</span></div>';
+  }
+  if(!nuevas.length)rows+='<div class="dnote">No añadió semanas porque el precio real que trae el informe ya lo teníamos. El precio nuevo de la Lonja se fija los jueves.</div>';
+  if(g.nombres&&g.nombres.length)rows+='<div class="dnote">Archivos: '+g.nombres.map(n=>String(n)).join(', ')+(g.pdfs_nuevos>g.nombres.length?' …':'')+'</div>';
+  el.innerHTML=rows;
 }
 function renderHist(d){
   $('hist').innerHTML=d.historial.slice(-12).reverse().map(r=>{
@@ -499,7 +533,8 @@ function buildEstado(){
       historial:(D.historial||[]).slice(-10),
       serie_precio:(function(){const s=(D.serie||[]).slice(-60);return {etiquetas:s.map(p=>'s'+p.w+'/'+String(p.y).slice(2)),precios:s.map(p=>p.v)};})(),
       serie_paises:(function(){const sp=D.serie_paises;if(!sp)return null;const n=(sp.labels||[]).length,a=Math.max(0,n-52);const cut=x=>(x||[]).slice(a);return {etiquetas:(sp.labels||[]).slice(a).map(l=>'s'+l.w+'/'+String(l.y).slice(2)),espana:cut(sp.esp),francia:cut(sp.fra),alemania:cut(sp.ale),dinamarca:cut(sp.din)};})(),
-      generado:D.generado
+      generado:D.generado,
+      ultima_lectura_cartero:D.diario||null
     };
   }catch(e){return {};}
 }

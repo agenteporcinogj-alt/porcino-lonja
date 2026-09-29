@@ -23,11 +23,11 @@ def paso_correo():
     user=os.environ.get('GMAIL_USER'); pw=os.environ.get('GMAIL_APP_PASSWORD')
     os.makedirs(PDFS,exist_ok=True)
     if not user or not pw:
-        print('  (sin credenciales de correo, uso lo que haya en disco)'); return
+        print('  (sin credenciales de correo, uso lo que haya en disco)'); return 0,[]
     since=(datetime.date.today()-datetime.timedelta(days=30)).strftime('%d-%b-%Y')
     M=imaplib.IMAP4_SSL('imap.gmail.com'); M.login(user,pw); M.select('INBOX')
     typ,data=M.search(None,f'(SINCE {since})'); ids=data[0].split()
-    saved=0
+    saved=0; nombres=[]
     for i in ids:
         typ,md=M.fetch(i,'(RFC822)'); msg=email.message_from_bytes(md[0][1])
         for part in msg.walk():
@@ -39,8 +39,8 @@ def paso_correo():
             nm=re.sub(r'[^A-Za-z0-9._\- ]','_',nm).strip() or 'adj.pdf'
             path=os.path.join(PDFS,nm)
             if os.path.exists(path): continue
-            with open(path,'wb') as f: f.write(part.get_payload(decode=True)); saved+=1
-    M.logout(); print(f'  PDFs nuevos del correo: {saved}')
+            with open(path,'wb') as f: f.write(part.get_payload(decode=True)); saved+=1; nombres.append(nm)
+    M.logout(); print(f'  PDFs nuevos del correo: {saved}'); return saved,nombres
 
 # ---------- extraccion ----------
 def isoweek(fn,pfx):
@@ -92,6 +92,16 @@ def din_de_ip(path):
             ns=NUM.findall(l)
             if len(ns)>=2: return tf(ns[0])
     return None
+def cebado_de_de(path):
+    # Lee el "Cerdo cebado" (precio vivo Lleida) que aparece en el informe de despiece, solo para mostrarlo.
+    try:
+        with pdfplumber.open(path) as pdf: t='\n'.join((p.extract_text() or '') for p in pdf.pages)
+    except: return None
+    for l in t.split('\n'):
+        if l.strip().lower().startswith('cerdo cebado'):
+            ns=NUM.findall(l)
+            if ns: return tf(ns[0])
+    return None
 
 # ---------- 2) ACTUALIZAR MAESTRO ----------
 def paso_maestro():
@@ -120,6 +130,18 @@ def paso_maestro():
                 c.value=wb[sheet].cell(8+w-1,col).value; c.fill=ORA
     wb.save(MASTER)
     print(f'  Semanas España nuevas en maestro: {nuevas}')
+    # resumen para el "diario del cartero" (semana más reciente leída)
+    lat={}
+    try:
+        cand=sorted(set(list(de)+list(po)+list(ip)))
+        lw=cand[-1] if cand else None
+        if lw is not None:
+            ale,fra=(ale_fra_de_de(de[lw]) if lw in de else (None,None))
+            lat={'sem':lw,'cebado':(cebado_de_de(de[lw]) if lw in de else None),
+                 'fra':fra,'ale':ale,'din':(din_de_ip(ip[lw]) if lw in ip else None)}
+    except Exception as e:
+        lat={}
+    return {'nuevas':nuevas,'lat':lat}
 
 # ---------- 3) MODELO ----------
 def solve(A,b):
@@ -212,7 +234,7 @@ def cifrar(plaintext,password):
     key=kdf.derive(password.encode())
     iv=os.urandom(12); ct=AESGCM(key).encrypt(iv,plaintext.encode(),None)
     return base64.b64encode(salt+iv+ct).decode()
-def paso_web(m,historial):
+def paso_web(m,historial,diario=None):
     delta=m['delta_cts']; base=m['pred']
     c1=lambda x:('%.1f'%x).replace('.',',')
     if delta>=1.0: sem={'estado':'AGUANTA','color':'verde','txt':'El precio va a SUBIR ~'+c1(delta)+' cts la semana que viene. Si puedes, aguanta la venta.'}
@@ -228,16 +250,20 @@ def paso_web(m,historial):
              'precision':{'modelo_cts':round(m['mae_m']*100,1),'naive_cts':round(m['mae_n']*100,1),'within2':m['within2']},
              'historial':[{'semana':r['semana'],'pred':r['prediccion'],'real':r.get('real',''),'error':r.get('error_cts','')} for r in historial],
              'serie':m['serie'],'serie_paises':m['serie_paises'],'contrib':m['contrib'],'vecinos':m['vecinos'],
-             'seas':m['seas'],'semaforo':sem,'escenarios':escenarios,'eventos':eventos}
+             'seas':m['seas'],'semaforo':sem,'escenarios':escenarios,'eventos':eventos,
+             'diario':(diario or {})}
     pw=os.environ.get('WEB_PASSWORD','cerdo')
     enc=cifrar(json.dumps(payload,ensure_ascii=False),pw)
     open(ENC_OUT,'w').write('window.ENC="'+enc+'";')
     print(f'  Web cifrada actualizada ({len(enc)} bytes).')
 
 if __name__=='__main__':
-    print('== 1) Correo =='); paso_correo()
-    print('== 2) Maestro =='); paso_maestro()
+    print('== 1) Correo =='); cor=paso_correo() or (0,[])
+    print('== 2) Maestro =='); mae=paso_maestro() or {}
     print('== 3) Modelo =='); m=paso_modelo()
     print('== 4) Registro =='); h=paso_registro(m)
-    print('== 5) Web =='); paso_web(m,h)
+    diario={'ts':datetime.datetime.now().strftime('%d/%m/%Y %H:%M'),
+            'pdfs_nuevos':cor[0],'nombres':cor[1][:8],
+            'nuevas':mae.get('nuevas',[]),'lat':mae.get('lat',{})}
+    print('== 5) Web =='); paso_web(m,h,diario)
     print(f"\nOK. Último {m['last']['w']}={m['last']['v']} | Predicción sem {m['nextw']}={m['pred']} | error {round(m['mae_m']*100,1)} cts")
