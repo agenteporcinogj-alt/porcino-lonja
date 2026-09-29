@@ -146,6 +146,7 @@ td:first-child,th:first-child{text-align:left}
 .chat-input input:focus{outline:2px solid var(--accent)}
 .chat-input button{border:0;border-radius:50%;width:42px;height:42px;background:var(--accent);color:#fff;font-size:1.1rem;cursor:pointer;flex:none}
 .chat-input button:disabled{opacity:.5;cursor:default}
+.btag{display:inline-block;margin-left:7px;padding:1px 7px;border-radius:10px;background:var(--surface2);border:1px solid var(--line);color:var(--muted);font-size:.66rem;font-weight:600;vertical-align:middle;font-family:inherit}
 #diario .drow{display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding:7px 0;border-bottom:1px solid var(--line)}
 #diario .drow:last-child{border-bottom:0}
 #diario .dk{color:var(--muted);font-size:.9rem}
@@ -275,7 +276,7 @@ footer a{color:var(--accent);cursor:pointer}
   <!-- TRACK RECORD -->
   <section class="rise">
     <h2>Predicción vs real</h2>
-    <p class="slab">Cada semana comparamos con Mercolleida. Esto es el historial de aciertos.</p>
+    <p class="slab">Cada semana comparamos con Mercolleida. Las marcadas <span class="btag">backtest</span> son simulaciones sobre semanas pasadas (no cuentan como acierto). El marcador real empieza en la semana 40.</p>
     <div class="chartcard" style="padding:4px 12px">
       <table><thead><tr><th>Semana</th><th>Predicción</th><th>Real</th><th>Error</th></tr></thead><tbody id="hist"></tbody></table>
     </div>
@@ -379,9 +380,11 @@ function renderDiario(d){
 }
 function renderHist(d){
   $('hist').innerHTML=d.historial.slice(-12).reverse().map(r=>{
+    const bt=(r.backtest!==undefined)?r.backtest:(Number(r.semana)<=39);
     let real='<span class="pend">pendiente</span>',err='—';
-    if(r.real){real=fmt(r.real,3)+' €';const e=parseFloat(r.error);err='<span class="'+(e<=2?'hit':'')+'">'+String(r.error).replace('.',',')+' cts</span>';}
-    return '<tr><td>sem '+r.semana+'</td><td>'+fmt(r.pred,3)+' €</td><td>'+real+'</td><td>'+err+'</td></tr>';
+    if(r.real){real=fmt(r.real,3)+' €';const e=parseFloat(r.error);err='<span class="'+(!bt&&e<=2?'hit':'')+'">'+String(r.error).replace('.',',')+' cts</span>';}
+    const tag=bt?'<span class="btag">backtest</span>':'';
+    return '<tr><td>sem '+r.semana+tag+'</td><td>'+fmt(r.pred,3)+' €</td><td>'+real+'</td><td>'+err+'</td></tr>';
   }).join('');
 }
 

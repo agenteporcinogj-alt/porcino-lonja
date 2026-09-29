@@ -234,6 +234,14 @@ def cifrar(plaintext,password):
     key=kdf.derive(password.encode())
     iv=os.urandom(12); ct=AESGCM(key).encrypt(iv,plaintext.encode(),None)
     return base64.b64encode(salt+iv+ct).decode()
+def es_backtest(r):
+    # Es backtest si la "predicción" se apuntó cuando la semana ya había empezado (no fue a ciegas).
+    try:
+        mon=datetime.date.fromisocalendar(int(r['anio']),int(r['semana']),1)
+        fp=datetime.date.fromisoformat(r['fecha_pred'])
+        return fp>=mon
+    except Exception:
+        return False
 def paso_web(m,historial,diario=None):
     delta=m['delta_cts']; base=m['pred']
     c1=lambda x:('%.1f'%x).replace('.',',')
@@ -248,7 +256,7 @@ def paso_web(m,historial,diario=None):
     payload={'generado':datetime.datetime.now().strftime('%d/%m/%Y %H:%M'),
              'ultimo':m['last'],'prediccion':{'y':m['nexty'],'w':m['nextw'],'v':m['pred']},'delta_cts':delta,
              'precision':{'modelo_cts':round(m['mae_m']*100,1),'naive_cts':round(m['mae_n']*100,1),'within2':m['within2']},
-             'historial':[{'semana':r['semana'],'pred':r['prediccion'],'real':r.get('real',''),'error':r.get('error_cts','')} for r in historial],
+             'historial':[{'semana':r['semana'],'anio':r.get('anio'),'pred':r['prediccion'],'real':r.get('real',''),'error':r.get('error_cts',''),'backtest':es_backtest(r)} for r in historial],
              'serie':m['serie'],'serie_paises':m['serie_paises'],'contrib':m['contrib'],'vecinos':m['vecinos'],
              'seas':m['seas'],'semaforo':sem,'escenarios':escenarios,'eventos':eventos,
              'diario':(diario or {})}
