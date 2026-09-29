@@ -281,13 +281,6 @@ footer a{color:var(--accent);cursor:pointer}
     </div>
   </section>
 
-  <!-- DIARIO DEL CARTERO -->
-  <section class="rise">
-    <h2>📄 Última lectura del cartero</h2>
-    <p class="slab">Qué ha leído el bot la última vez que entró al correo. Transparencia total.</p>
-    <div class="chartcard" id="diario" style="padding:14px 16px"></div>
-  </section>
-
   <footer>Datos: Mercolleida (cotización semanal, jueves) · Actualización automática L-V · <a id="logout">cerrar sesión</a></footer>
 </div>
 
@@ -332,7 +325,7 @@ function render(d){
   const dl=d.delta_cts;$('delta').innerHTML='<span class="'+(dl>0?'up-t':dl<0?'down-t':'')+'">'+(dl>0?'▲':dl<0?'▼':'▬')+' '+scts(dl)+' vs la semana pasada</span>';
   $('lastv').textContent=fmt(d.ultimo.v,3);$('lastw').textContent='semana '+d.ultimo.w+' · '+d.ultimo.y;
   $('prec').textContent=fmt(d.precision.modelo_cts,1);$('within').textContent=d.precision.within2;
-  renderWhy(d);renderEsc(d);renderEvt(d);renderHist(d);renderDiario(d);drawChart(d.serie);drawComov(d.serie_paises);
+  renderWhy(d);renderEsc(d);renderEvt(d);renderHist(d);drawChart(d.serie);drawComov(d.serie_paises);
   initChat();
 }
 function animateNum(el,target,dec){dec=dec||2;let cur=0;const t0=performance.now();
