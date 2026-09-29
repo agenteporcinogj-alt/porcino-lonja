@@ -255,6 +255,7 @@ footer a{color:var(--accent);cursor:pointer}
       <div class="leghint">👆 <b>Toca cualquier país</b> para ocultarlo o mostrarlo y comparar los que quieras (el 👁 = visible, 🚫 = oculto).</div>
       <div class="legend" id="cc-leg"></div>
       <div id="comov"></div>
+      <div class="leghint" id="comov-cap" style="margin-top:8px"></div>
     </div>
   </section>
 
@@ -477,7 +478,6 @@ function drawComov(sp){
     g+='<line x1="'+mL+'" y1="'+y+'" x2="'+(W-mR)+'" y2="'+y+'" stroke="'+(is100?'var(--muted)':'var(--line)')+'" stroke-dasharray="'+(is100?'':'3 3')+'"/>';
     g+='<text x="'+(mL-6)+'" y="'+(y+3)+'" text-anchor="end" font-size="9" fill="var(--muted)">'+v+(is100?'':'')+'</text>';}
   const L0=sp.labels[0]||{w:'?',y:''};const startLbl='sem '+L0.w+'/'+String(L0.y).slice(2);
-  g+='<text x="'+mL+'" y="'+(Y(100)-4)+'" font-size="8.5" fill="var(--muted)">100 = inicio ('+startLbl+', hace ~1 año)</text>';
   let yr='';sp.labels.forEach((l,i)=>{if(l.w===1)yr+='<text x="'+X(i)+'" y="'+(H-6)+'" text-anchor="middle" font-size="9" fill="var(--muted)">'+l.y+'</text>';});
   let lines='';COMOV_SER.forEach(s=>{if(COMOV_HIDE[s[0]])return;const arr=sp[s[0]];let path='',st=false,lx=0,ly=0;arr.forEach((v,i)=>{if(v==null)return;const x=X(i),y=Y(v);path+=(st?'L':'M')+x.toFixed(1)+' '+y.toFixed(1);st=true;lx=x;ly=y;});const esp=s[0]==='esp';lines+='<path d="'+path+'" fill="none" stroke="'+s[2]+'" stroke-width="'+(esp?2.6:1.6)+'" opacity="'+(esp?1:.85)+'" stroke-linejoin="round"/><text x="'+Math.min(lx+5,W-28)+'" y="'+(ly+3)+'" font-size="9.5" fill="'+s[2]+'" font-weight="700">'+s[1].slice(0,3)+'</text>';});
   host.innerHTML='<svg viewBox="0 0 '+W+' '+H+'">'+g+yr+lines
@@ -495,6 +495,7 @@ function drawComov(sp){
   cov.addEventListener('touchstart',move,{passive:true});cov.addEventListener('touchmove',e=>{e.preventDefault();move(e);},{passive:false});
   $('cc-leg').innerHTML=COMOV_SER.map(s=>'<span class="lg'+(COMOV_HIDE[s[0]]?' off':'')+'" data-k="'+s[0]+'"><span class="sw" style="background:'+s[2]+'"></span>'+s[1]+'<span class="tog">'+(COMOV_HIDE[s[0]]?'🚫':'👁')+'</span></span>').join('');
   $('cc-leg').querySelectorAll('.lg').forEach(el=>el.onclick=()=>{const k=el.dataset.k;const vis=COMOV_SER.filter(s=>!COMOV_HIDE[s[0]]);if(!COMOV_HIDE[k]&&vis.length<=1)return;COMOV_HIDE[k]=!COMOV_HIDE[k];drawComov();});
+  const cap=$('comov-cap');if(cap)cap.innerHTML='📏 <b>Cómo leerlo:</b> la línea gris del <b>100</b> = nivel de hace ~1 año ('+startLbl+'). Si un país está en <b>78</b>, está un <b>22% por debajo</b> de entonces; en <b>110</b>, un 10% por encima. No son €, es para ver <b>quién se mueve antes</b>.';
 }
 
 /* ================= CHAT: motor híbrido (léxico + IA semántica) ================= */
