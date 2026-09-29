@@ -400,11 +400,12 @@ function renderWhy(d){
   // tooltip interactivo
   let tip=host.querySelector('.gtip');if(!tip){tip=document.createElement('div');tip.className='gtip';host.appendChild(tip);}
   tip.classList.remove('up');
+  const wsvg=host.querySelector('svg');
   host.querySelectorAll('.wrow').forEach(rc=>{
-    const show=()=>{const s=steps[+rc.dataset.i];const bx=host.getBoundingClientRect(),rr=rc.getBoundingClientRect();
+    const show=()=>{const s=steps[+rc.dataset.i];const bx=wsvg.getBoundingClientRect(),hb=host.getBoundingClientRect(),rr=rc.getBoundingClientRect();if(!bx.width)return;
       tip.innerHTML=s.ic+' <b>'+s.n+'</b> · '+scts(s.v)+'<br>'+s.exp;tip.style.opacity=1;
-      tip.style.left=(bx.width-206)+'px';                    // FIJO a la derecha: no se mueve al pasar el dedo
-      tip.style.top=Math.max(2,(rr.top-bx.top+rr.height*0.5-tip.offsetHeight/2))+'px';};
+      tip.style.left=Math.max(4,(bx.left-hb.left)+bx.width-204)+'px';   // FIJO a la derecha: no se mueve al pasar el dedo
+      tip.style.top=Math.max(2,(rr.top-hb.top+rr.height*0.5-tip.offsetHeight/2))+'px';};
     rc.addEventListener('mouseenter',show);
     rc.addEventListener('mouseleave',()=>{tip.style.opacity=0;});
     rc.addEventListener('touchstart',e=>{show();},{passive:true});
@@ -484,13 +485,13 @@ function drawComov(sp){
     +'<line id="cvcr" x1="0" y1="'+mT+'" x2="0" y2="'+(H-mB)+'" stroke="var(--ink)" stroke-width="1" opacity="0"/>'
     +'<rect id="cvcov" x="'+mL+'" y="'+mT+'" width="'+(W-mL-mR)+'" height="'+(H-mT-mB)+'" fill="transparent"/></svg>';
   let tip=host.querySelector('.gtip');if(!tip){tip=document.createElement('div');tip.className='gtip';host.appendChild(tip);}
-  const cr=host.querySelector('#cvcr'),cov=host.querySelector('#cvcov');
-  const move=ev=>{const bx=host.getBoundingClientRect();const p=ev.touches?ev.touches[0]:ev;const px=(p.clientX-bx.left)*(W/bx.width);
+  const cr=host.querySelector('#cvcr'),cov=host.querySelector('#cvcov'),svgEl=host.querySelector('svg');
+  const move=ev=>{const bx=svgEl.getBoundingClientRect();if(!bx.width)return;const p=ev.touches?ev.touches[0]:ev;const px=(p.clientX-bx.left)*(W/bx.width);
     let k=Math.round(((px-mL)/(W-mL-mR))*(N-1));k=Math.max(0,Math.min(N-1,k));const x=X(k);
     cr.setAttribute('x1',x);cr.setAttribute('x2',x);cr.setAttribute('opacity',.3);
     const l=sp.labels[k];let html='<b>sem '+l.w+'/'+String(l.y).slice(2)+'</b>';
     COMOV_SER.forEach(s=>{if(COMOV_HIDE[s[0]])return;const v=sp[s[0]][k];if(v!=null){const pc=Math.round(v-100);html+='<br>'+s[3]+' '+s[1]+': <b>'+Math.round(v)+'</b> <span style="color:var(--muted)">('+(pc>=0?'+':'−')+Math.abs(pc)+'%)</span>';}});
-    tip.innerHTML=html;tip.style.opacity=1;tip.style.left=(bx.width-206)+'px';tip.style.top='6px';};   // FIJO arriba a la derecha
+    tip.innerHTML=html;tip.style.opacity=1;tip.style.left=Math.max(4,(bx.left-host.getBoundingClientRect().left)+bx.width-204)+'px';tip.style.top='6px';};   // FIJO arriba a la derecha
   cov.addEventListener('mousemove',move);cov.addEventListener('mouseleave',()=>{cr.setAttribute('opacity',0);tip.style.opacity=0;});
   cov.addEventListener('touchstart',move,{passive:true});cov.addEventListener('touchmove',e=>{e.preventDefault();move(e);},{passive:false});
   $('cc-leg').innerHTML=COMOV_SER.map(s=>'<span class="lg'+(COMOV_HIDE[s[0]]?' off':'')+'" data-k="'+s[0]+'"><span class="sw" style="background:'+s[2]+'"></span>'+s[1]+'<span class="tog">'+(COMOV_HIDE[s[0]]?'🚫':'👁')+'</span></span>').join('');
