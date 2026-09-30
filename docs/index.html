@@ -477,16 +477,16 @@ function renderDiario(d){
 const DEMANDA={
   fuente:'Interporc (informe SICE, may-2026) · datos de aduanas (DATACOMEX/AEAT) · enero–marzo 2026. Verificado cruzando 2 medios independientes (Asaja y Cárnicas Iruña): los % coinciden letra por letra.',
   total:'734.900 t (+1,6% volumen) pero <b>−14,8% en valor</b> · precio medio 2,57 €/kg (−16,2%)',
-  resumen:'Clave del año: se vende <b>parecido volumen pero se cobra bastante menos</b> (−14,8% en dinero) porque <b>China y Japón</b> — los grandes compradores — compran menos. Hay países que crecen muy rápido (Vietnam, Corea, Polonia…) pero son <b>mucho más pequeños</b>: ni de lejos compensan lo que se pierde en Asia grande.',
-  aviso:'⚠️ <b>Ojo con los %:</b> Vietnam "+166%" suena espectacular, pero en <b>todo 2024 compró 17.367 t</b> — lo que China compra en <b>5–6 SEMANAS</b> (China mueve ~116.000 t solo en este trimestre). Un % enorme sobre una base pequeña sigue siendo pequeño en la práctica. Por eso separamos "grandes" de "pequeños que crecen".',
+  resumen:'Lo que de verdad pasó en el 1T 2026: <b>el volumen exportado incluso subió</b> (+1,6% en toneladas), pero el <b>precio por kilo se hundió</b> (2,57 €/kg, −16,2%), así que se ingresó <b>−14,8% menos dinero</b>. O sea: el problema fue el <b>precio</b>, no perder clientes. Además el mapa cambió: China baja y Japón se desploma, mientras crecen mercados pequeños. En <b>toneladas esos nuevos sí compensaron</b> (por eso el total sube); en <b>dinero, no</b>.',
+  aviso:'⚠️ <b>Ojo con los %:</b> Vietnam "+166%" impresiona, pero en <b>todo 2024 compró 17.367 t</b> — lo que China compra en <b>~2 semanas</b> (China mueve ~8.900 t/semana, ~116.000 t este trimestre). Un % enorme sobre una base diminuta sigue siendo diminuto. Por eso separamos "grandes" de "pequeños que crecen".',
   grandes:[
-    {n:'🇪🇺 Unión Europea (conjunto)',share:'~60% de toda la exportación',tend:null,estado:'base',nota:'El grueso del negocio, con diferencia. Estable, de proximidad.'},
+    {n:'🇪🇺 Unión Europea (conjunto)',share:'la mayor parte de la exportación',tend:null,estado:'base',nota:'El grueso del negocio, con diferencia: mercado de proximidad y estable. (El % exacto no viene en el informe trimestral, así que no lo cierro.)'},
     {n:'🇫🇷 Francia',share:'11,9% de la facturación · 1er mercado por valor',tend:null,estado:'base',nota:'El primer cliente por dinero, dentro de la UE.'},
-    {n:'🇨🇳 China',share:'15,8% del volumen total (~116.000 t solo este trimestre)',tend:-19.9,estado:'baja',nota:'El gigante fuera de la UE. Sigue siendo nº1 en volumen extra-UE, pero cae fuerte: aranceles chinos (4,9–19,8%, desde dic-2025) + más autosuficiencia. También −34,2% en valor.'},
-    {n:'🇯🇵 Japón',share:'gran comprador tradicional',tend:-61,estado:'baja',nota:'Desplome (−61% volumen, −63% valor). Se ha hundido como destino este año.'}
+    {n:'🇨🇳 China',share:'15,8% del volumen total (~116.000 t este trimestre)',tend:-19.9,estado:'baja',nota:'El gigante fuera de la UE. Sigue siendo nº1 en volumen extra-UE, pero cae: aranceles chinos (4,9–19,8%, desde dic-2025) + más autosuficiencia. También −34,2% en valor.'},
+    {n:'🇯🇵 Japón',share:'gran comprador tradicional',tend:-61,estado:'baja',nota:'Cae en picado (−61% volumen, −63% valor). Pero ojo: es muy probable que sea sobre todo un <b>bloqueo sanitario al cerdo español por la PPA</b>, no que Japón deje de querer cerdo. No es lo mismo: un veto puede reabrir cuando se controle la peste.'}
   ],
   pequenos:[
-    {n:'🇻🇳 Vietnam',share:'2024 completo: 17.367 t (23,3 M€) — pequeño',tend:166,estado:'sube',nota:'El que más crece en %, pero de una base diminuta: todo 2024 = lo que China compra en 5-6 semanas. Real, pero aún no compensa lo que se pierde en Asia grande.'},
+    {n:'🇻🇳 Vietnam',share:'2024 completo: 17.367 t (23,3 M€) — diminuto',tend:166,estado:'sube',nota:'El que más crece en %, pero de una base diminuta: todo 2024 = lo que China compra en ~2 semanas. Crecimiento real, pero en toneladas es todavía muy poco.'},
     {n:'🇰🇷 Corea del Sur',share:'base moderada, creciendo',tend:48.3,estado:'sube',nota:'Sube con fuerza y gana peso, pero sigue siendo bastante más pequeño que China o Japón.'},
     {n:'🇵🇱 Polonia',share:'dentro de la UE (base ya grande)',tend:42.4,estado:'sube',nota:'Al ser UE, su base ya es más sólida que la de los países asiáticos emergentes.'},
     {n:'🇨🇿 República Checa',share:'dentro de la UE',tend:40.1,estado:'sube',nota:'Otro europeo del Este al alza, dentro del bloque UE ya grande.'},
