@@ -161,6 +161,22 @@ td:first-child,th:first-child{text-align:left}
 .legend .lg .tog{font-size:.72rem}
 .leghint{width:100%;font-size:.76rem;color:var(--muted);margin:2px 0 2px}
 .leghint b{color:var(--accent)}
+.dem-sort{display:flex;gap:8px;margin:4px 0 12px;flex-wrap:wrap}
+.dem-tab{cursor:pointer;border:1px solid var(--line);background:var(--surface2);color:var(--muted);border-radius:16px;padding:6px 13px;font-size:.82rem;font-family:inherit;transition:.15s}
+.dem-tab.on{border-color:var(--accent);color:var(--ink);background:var(--surface)}
+.dem-row{background:var(--surface);border:1px solid var(--line);border-left:4px solid var(--muted);border-radius:12px;padding:11px 14px;margin-bottom:9px;transition:.15s}
+.dem-row.sube{border-left-color:#3fae6b}
+.dem-row.baja{border-left-color:#E0655B}
+.dem-row.base{border-left-color:#5b8def}
+.dem-h{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
+.dem-n{font-weight:600;font-size:.98rem}
+.dem-b{font-family:"IBM Plex Mono",monospace;font-size:.82rem;font-weight:700;padding:2px 9px;border-radius:12px;white-space:nowrap}
+.dem-b.up{color:#3fae6b;background:rgba(63,174,107,.12)}
+.dem-b.down{color:#E0655B;background:rgba(224,101,91,.12)}
+.dem-b.base{color:#5b8def;background:rgba(91,141,239,.12)}
+.dem-p{margin-top:3px}
+.dem-peso{font-size:.8rem;color:var(--muted);font-family:"IBM Plex Mono",monospace}
+.dem-note{margin-top:6px;font-size:.85rem;color:var(--ink);line-height:1.45;opacity:.9}
 #diario .drow{display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding:7px 0;border-bottom:1px solid var(--line)}
 #diario .drow:last-child{border-bottom:0}
 #diario .dk{color:var(--muted);font-size:.9rem}
@@ -259,6 +275,18 @@ footer a{color:var(--accent);cursor:pointer}
     </div>
   </section>
 
+  <!-- DEMANDA / DESTINOS -->
+  <section class="rise">
+    <h2>¿Quién compra cerdo español? 🌍</h2>
+    <p class="slab" id="dem-sum"></p>
+    <div class="dem-sort">
+      <button class="dem-tab" data-s="tend">📈 Quién sube / baja</button>
+      <button class="dem-tab" data-s="peso">⚖️ Quién pesa más</button>
+    </div>
+    <div id="dem-list"></div>
+    <div class="leghint" id="dem-cap" style="margin-top:10px"></div>
+  </section>
+
   <!-- EVOLUCION -->
   <section class="rise">
     <h2>Evolución reciente</h2>
@@ -342,7 +370,7 @@ function render(d){
   const dl=d.delta_cts;$('delta').innerHTML='<span class="'+(dl>0?'up-t':dl<0?'down-t':'')+'">'+(dl>0?'▲':dl<0?'▼':'▬')+' '+scts(dl)+' vs la semana pasada</span>';
   $('lastv').textContent=fmt(d.ultimo.v,3);$('lastw').textContent='semana '+d.ultimo.w+' · '+d.ultimo.y;
   $('prec').textContent=fmt(d.precision.modelo_cts,1);$('within').textContent=d.precision.within2;
-  renderWhy(d);renderEsc(d);renderEvt(d);renderHist(d);drawChart(d.serie);drawComov(d.serie_paises);
+  renderWhy(d);renderEsc(d);renderEvt(d);renderHist(d);renderDemanda();drawChart(d.serie);drawComov(d.serie_paises);
   initChat();
 }
 function animateNum(el,target,dec){dec=dec||2;let cur=0;const t0=performance.now();
@@ -439,6 +467,36 @@ function renderDiario(d){
   if(!nuevas.length)rows+='<div class="dnote">No añadió semanas porque el precio real que trae el informe ya lo teníamos. El precio nuevo de la Lonja se fija los jueves.</div>';
   if(g.nombres&&g.nombres.length)rows+='<div class="dnote">Archivos: '+g.nombres.map(n=>String(n)).join(', ')+(g.pdfs_nuevos>g.nombres.length?' …':'')+'</div>';
   el.innerHTML=rows;
+}
+/* ===== ¿Quién compra cerdo español? (datos Interporc, trimestrales, actualización manual) ===== */
+const DEMANDA={
+  fuente:'Interporc · 1er trimestre 2026 (ene–mar)',
+  total:'734.900 t exportadas · +1,6% volumen · −14,8% valor',
+  resumen:'La <b>Unión Europea es el 60%</b> de las ventas (Francia, Italia, Portugal, Polonia…): el pan de cada día. Fuera de la UE, <b>Asia se está reordenando</b>: China y Japón cayendo, y <b>Corea del Sur y Vietnam disparados</b>. Ahí es donde se está moviendo la demanda nueva.',
+  destinos:[
+    {n:'🇪🇺 Unión Europea (bloque)',peso:60,val:'3.405 M€',tend:null,estado:'base',nota:'El cliente nº1 y el más estable: 6 de cada 10 € salen de aquí. Es la base que no falla.'},
+    {n:'🇨🇳 China',peso:15.8,val:'527 M€',tend:-19.9,estado:'baja',nota:'Sigue siendo el nº1 en volumen, pero cayendo fuerte: aranceles chinos del 4,9–19,8% (desde dic-2025) + más autosuficiencia china.'},
+    {n:'🇰🇷 Corea del Sur',peso:null,val:null,tend:46.7,estado:'sube',nota:'El que más sube. Ya es el PRIMER destino fuera de la UE. Aquí está la demanda que crece.'},
+    {n:'🇻🇳 Vietnam',peso:null,val:null,tend:166,estado:'sube',nota:'Disparado (+166%). Mercado emergente que absorbe lo que otros destinos dejan de comprar.'},
+    {n:'🇯🇵 Japón',peso:null,val:null,tend:-61,estado:'baja',nota:'Desplome brutal (−61%). Se ha hundido como destino este año.'},
+    {n:'🇵🇱 Polonia',peso:null,val:null,tend:42.4,estado:'sube',nota:'Sube con fuerza dentro de la propia UE (+42%). Demanda europea recolocándose.'}
+  ]
+};
+let DEM_SORT='tend';
+function renderDemanda(){
+  const D2=DEMANDA;const el=$('dem-sum');if(!el)return;
+  el.innerHTML=D2.resumen;
+  $('dem-list').closest('section').querySelectorAll('.dem-tab').forEach(b=>b.classList.toggle('on',b.dataset.s===DEM_SORT));
+  const arr=[...D2.destinos].sort((a,b)=> DEM_SORT==='tend' ? ((b.tend==null?-999:b.tend)-(a.tend==null?-999:a.tend)) : ((b.peso||0)-(a.peso||0)) );
+  $('dem-list').innerHTML=arr.map(d=>{
+    const t=d.tend;const cls=d.estado;
+    const badge = t==null ? '<span class="dem-b base">base · estable</span>'
+      : '<span class="dem-b '+(t>0?'up':'down')+'">'+(t>0?'▲ +'+fmt(t,1):'▼ −'+fmt(Math.abs(t),1))+'%</span>';
+    const peso = d.peso!=null ? '<span class="dem-peso">'+(d.val?d.val+' · ':'')+d.peso+'% del total</span>' : (d.val?'<span class="dem-peso">'+d.val+'</span>':'');
+    return '<div class="dem-row '+cls+'"><div class="dem-h"><span class="dem-n">'+d.n+'</span>'+badge+'</div>'+(peso?'<div class="dem-p">'+peso+'</div>':'')+'<div class="dem-note">'+d.nota+'</div></div>';
+  }).join('');
+  $('dem-cap').innerHTML='📌 Fuente: <b>'+D2.fuente+'</b> · '+D2.total+'. Son datos <b>trimestrales, con ~2 meses de retraso</b> — es la <b>foto de la demanda, no el precio en vivo</b>. Se actualiza a mano cuando Interporc publica el siguiente informe.';
+  $('dem-list').closest('section').querySelectorAll('.dem-tab').forEach(b=>b.onclick=()=>{DEM_SORT=b.dataset.s;renderDemanda();});
 }
 function renderHist(d){
   $('hist').innerHTML=d.historial.slice(-12).reverse().map(r=>{
