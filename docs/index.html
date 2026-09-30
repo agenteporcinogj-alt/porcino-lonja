@@ -775,7 +775,7 @@ async function ask(text){
     // 2) cerebro Claude CON el hilo de la conversación y los números reales
     let ansText=null;
     try{
-      const resp=await fetch(WORKER,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({mensajes:CHATLOG.slice(-8),usuario:chatUser(),estado:buildEstado(),extra:EXTRA_INSTR})});
+      const resp=await fetch(WORKER,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({mensajes:CHATLOG.slice(-8),usuario:chatUser(),estado:buildEstado(),extra:EXTRA_INSTR,modelo:'sonnet'})});
       const data=await resp.json();
       if(data&&data.respuesta)ansText=data.respuesta;
     }catch(e){}

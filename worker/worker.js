@@ -26,6 +26,9 @@ export default {
     const estado = body.estado || {};
     const usuario = String(body.usuario || 'anónimo').slice(0, 40);
     const extra = String(body.extra || '').slice(0, 4000);
+    // Modelo elegido desde la web (así puedo cambiarlo sin re-pegar el worker). Por defecto: Sonnet (razona más).
+    const MODELOS = { haiku: 'claude-haiku-4-5-20251001', sonnet: 'claude-sonnet-5', opus: 'claude-opus-5-5' };
+    const modelo = MODELOS[String(body.modelo || '').toLowerCase()] || 'claude-sonnet-5';
 
     let mensajes = Array.isArray(body.mensajes) ? body.mensajes : [];
     if (!mensajes.length && body.pregunta) mensajes = [{ role: 'user', content: String(body.pregunta) }];
@@ -85,8 +88,8 @@ Responde en español. Por defecto BREVE (3-6 frases); si te piden "desarrolla/am
           'content-type': 'application/json',
         },
         body: JSON.stringify({
-          model: 'claude-haiku-4-5-20251001',
-          max_tokens: 1200,
+          model: modelo,
+          max_tokens: 1400,
           system,
           messages: mensajes,
         }),
