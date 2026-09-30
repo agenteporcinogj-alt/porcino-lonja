@@ -1,27 +1,32 @@
-// ── Cerebro del chat IA de Grupo Jorge (Cloudflare Worker) · v3 DEFINITIVO ──
-// La API key va como SECRETO en Cloudflare (env.ANTHROPIC_API_KEY): nunca viaja al navegador.
-// La web manda: { mensajes:[{role,content}], estado (datos reales), extra (instrucciones de la web), usuario }
-// Diseño clave: la IDENTIDAD y el PORTERO viven aquí (fijo, seguro). Las HERRAMIENTAS/tono llegan en "extra"
-// desde la web → así puedo mejorar el chat solo subiendo la web, SIN volver a tocar este Worker nunca más.
+// ── Cerebro del chat IA de Grupo Jorge (Cloudflare Worker) · v4 (con registro de preguntas) ──
+// Secretos en Cloudflare: ANTHROPIC_API_KEY (la llave de Claude) y ADMIN_KEY (para ver el registro).
+// Binding KV: LOG (donde se guardan las preguntas).
+// POST → chat + guarda la pregunta.  GET /?ver=1&key=ADMIN_KEY → página con todas las preguntas.
 
 export default {
   async fetch(request, env) {
     const cors = {
       'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Methods': 'POST, OPTIONS',
+      'Access-Control-Allow-Methods': 'POST, GET, OPTIONS',
       'Access-Control-Allow-Headers': 'Content-Type',
     };
     if (request.method === 'OPTIONS') return new Response(null, { headers: cors });
+
+    // ---- Ver el registro de preguntas (para el dueño) ----
+    if (request.method === 'GET') {
+      const url = new URL(request.url);
+      if (url.searchParams.has('ver')) return verLog(url, env, cors);
+      return new Response('OK', { headers: cors });
+    }
     if (request.method !== 'POST') return json({ error: 'POST only' }, 405, cors);
 
     let body;
     try { body = await request.json(); } catch { return json({ error: 'bad json' }, 400, cors); }
 
     const estado = body.estado || {};
-    const usuario = String(body.usuario || 'anon').slice(0, 40);
-    const extra = String(body.extra || '').slice(0, 4000);   // instrucciones de herramientas (desde la web)
+    const usuario = String(body.usuario || 'anónimo').slice(0, 40);
+    const extra = String(body.extra || '').slice(0, 4000);
 
-    // Hilo de conversación (compatibilidad con {pregunta})
     let mensajes = Array.isArray(body.mensajes) ? body.mensajes : [];
     if (!mensajes.length && body.pregunta) mensajes = [{ role: 'user', content: String(body.pregunta) }];
     mensajes = mensajes
@@ -35,7 +40,6 @@ export default {
     const pregunta = mensajes[mensajes.length - 1].content;
     const enConversacion = mensajes.some(m => m.role === 'assistant');
 
-    // ── PORTERO con sentido común (server-side, no se puede saltar desde el navegador) ──
     const txt = pregunta.toLowerCase();
     const TEMAS = ['cerdo','porcino','precio','lonja','lleida','mercolleida','cotiz','francia','aleman',
       'dinamarca','españa','espana','semana','predic','model','matader','canal','vivo','kg','céntimo',
@@ -57,7 +61,6 @@ export default {
       return json({ respuesta: 'Puedo ayudarte con todo lo del mercado del cerdo y las predicciones de la Lonja de Lleida 🐷 — precios, el porqué, tendencia, Francia/Alemania, cuándo vender, escenarios, impacto en €, gráficas… Pregúntame por ahí y te lo clavo.' }, 200, cors);
     }
 
-    // ── Identidad + reglas (FIJO aquí) ──
     const CORE = `Eres el analista de mercado porcino de Grupo Jorge (empresa que sacrifica ~55.000 cerdos/semana de 120 kg). Hablas claro, cercano y con criterio, como un analista veterano que se moja y ayuda a decidir.
 
 ÁMBITO: mercado del cerdo, Lonja de Lleida (Mercolleida), precios en €/kg, países vecinos (Francia, Alemania, Dinamarca), tu modelo de predicción y las decisiones de venta. Mantén SIEMPRE el hilo de la conversación: si el usuario dice "y por qué", "desarróllalo", "y eso", "en serio", "amplía"… se refiere a lo último que hablasteis. Si te piden algo TOTALMENTE ajeno al cerdo, recházalo con simpatía en una frase y reconduce al mercado, sin cortar en seco.
@@ -100,14 +103,43 @@ Responde en español. Por defecto BREVE (3-6 frases); si te piden "desarrolla/am
   },
 };
 
-// Log compartido opcional (si más adelante conectas un KV llamado LOG).
+// Guarda la pregunta en el KV. La info va en la METADATA para poder listarla de una.
 async function registrar(env, usuario, pregunta, respuesta) {
   try {
     if (!env.LOG) return;
     const key = `q:${Date.now()}:${Math.random().toString(36).slice(2, 7)}`;
-    await env.LOG.put(key, JSON.stringify({ t: new Date().toISOString(), usuario, pregunta, respuesta }));
+    await env.LOG.put(key, String(respuesta).slice(0, 6000), {
+      metadata: { t: new Date().toISOString(), usuario, pregunta: String(pregunta).slice(0, 300) },
+      expirationTtl: 60 * 60 * 24 * 365, // se guarda 1 año
+    });
   } catch (_) {}
 }
+
+// Página para ver todas las preguntas (protegida con ADMIN_KEY).
+async function verLog(url, env, cors) {
+  const key = url.searchParams.get('key') || '';
+  if (!env.ADMIN_KEY || key !== env.ADMIN_KEY)
+    return new Response('No autorizado. Añade ?ver=1&key=TU_ADMIN_KEY', { status: 401, headers: cors });
+  if (!env.LOG)
+    return htmlResp('<h1>🐷 Registro</h1><p>Aún no está el almacén conectado (falta el binding KV llamado LOG).</p>', cors);
+  const list = await env.LOG.list({ limit: 1000 });
+  const rows = list.keys.map(k => k.metadata || {}).filter(m => m.t).sort((a, b) => (a.t < b.t ? 1 : -1));
+  let h = '<h1>🐷 Preguntas al chatbot · ' + rows.length + '</h1>';
+  h += '<table><tr><th>Cuándo</th><th>Quién</th><th>Pregunta</th></tr>';
+  for (const m of rows) {
+    const f = new Date(m.t);
+    const cuando = isNaN(f) ? esc(m.t) : f.toLocaleString('es-ES');
+    h += '<tr><td class=t>' + esc(cuando) + '</td><td class=u>' + esc(m.usuario || '?') + '</td><td>' + esc(m.pregunta || '') + '</td></tr>';
+  }
+  h += '</table>';
+  return htmlResp(h, cors);
+}
+function htmlResp(inner, cors) {
+  const css = 'body{font-family:system-ui,Arial;background:#141414;color:#eee;margin:0;padding:16px}h1{font-size:1.1rem}table{border-collapse:collapse;width:100%;font-size:.9rem}td,th{border-bottom:1px solid #333;padding:9px;text-align:left;vertical-align:top}th{color:#e0a35b}.u{color:#5b8def;font-weight:600;white-space:nowrap}.t{color:#888;white-space:nowrap;font-size:.78rem}';
+  const html = '<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Preguntas · Grupo Jorge</title><style>' + css + '</style>' + inner;
+  return new Response(html, { status: 200, headers: { ...cors, 'content-type': 'text/html; charset=utf-8' } });
+}
+function esc(s) { return String(s).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c])); }
 
 function json(obj, status, cors) {
   return new Response(JSON.stringify(obj), { status, headers: { ...cors, 'content-type': 'application/json' } });

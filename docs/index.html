@@ -646,7 +646,10 @@ function initChat(){
   $('csend').onclick=()=>{if($('cin').value.trim())ask($('cin').value.trim());};
   $('cin').addEventListener('keydown',e=>{if(e.key==='Enter'&&$('cin').value.trim())ask($('cin').value.trim());});
   if(!$('cbody').dataset.init){$('cbody').dataset.init='1';
-    setTimeout(()=>{addBub('¡Hola! 👋 Soy tu analista porcino con <b>IA</b>. La predicción de esta semana es <b>'+fmt(D.prediccion.v)+' €/kg</b>. Pregúntame lo que quieras con tus palabras — precio, por qué, si vendo o aguanto, los vecinos… te respondo con los <b>datos reales</b> del modelo, sin inventar nada.','bot');},350);
+    setTimeout(()=>{
+      if(!localStorage.getItem('cu_name')){addBub('¡Hola! 👋 Soy tu analista porcino con <b>IA</b>. Antes de empezar, <b>¿cómo te llamas?</b> (así sé quién pregunta qué). Escríbeme tu nombre 👇','bot');NEEDNAME=true;}
+      else{addBub('¡Hola de nuevo, <b>'+chatUser()+'</b>! 👋 La predicción de esta semana es <b>'+fmt(D.prediccion.v)+' €/kg</b>. Pregúntame lo que quieras — precio, por qué, si vendo o aguanto, los vecinos… con <b>datos reales</b>, sin inventar nada.','bot');}
+    },350);
     loadEmb();}
 }
 function addBub(html,cls){const b=document.createElement('div');b.className='bub '+cls;b.innerHTML=html;$('cbody').appendChild(b);$('cbody').scrollTop=$('cbody').scrollHeight;return b;}
@@ -654,7 +657,9 @@ function showTyping(){const t=document.createElement('div');t.className='typing'
 /* ===== Puente al cerebro Claude (Cloudflare Worker) ===== */
 const WORKER='https://porcino-chat.agenteporcinogj.workers.dev/';
 const QUICK={saludo:1,gracias:1};            // estas se responden en local (gratis, instantáneo)
-function chatUser(){try{let u=localStorage.getItem('cu');if(!u){u='web-'+Math.random().toString(36).slice(2,7);localStorage.setItem('cu',u);}return u;}catch(e){return 'web';}}
+function chatUser(){try{return localStorage.getItem('cu_name')||'anónimo';}catch(e){return 'anónimo';}}
+function setChatName(n){try{localStorage.setItem('cu_name',n);}catch(e){}}
+let NEEDNAME=false;
 function mdToHtml(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\*\*([^*]+)\*\*/g,'<b>$1</b>').replace(/\n/g,'<br>');}
 function buildEstado(){
   try{
@@ -759,6 +764,7 @@ function pushLog(role,content){CHATLOG.push({role,content});if(CHATLOG.length>12
 function stripTags(h){const d=document.createElement('div');d.innerHTML=h;return (d.textContent||'').trim();}
 async function ask(text){
   text=(text||'').trim();if(!text||sending)return;   // evita doble envío
+  if(NEEDNAME){addBub(text,'me');$('cin').value='';setChatName(text.slice(0,40));NEEDNAME=false;addBub('¡Genial, <b>'+chatUser()+'</b>! Ya sé quién eres. Pregúntame lo que quieras 🐷','bot');return;}
   sending=true;$('csend').disabled=true;
   try{
     addBub(text,'me');$('cin').value='';pushLog('user',text);
