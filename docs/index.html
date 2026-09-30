@@ -280,8 +280,9 @@ footer a{color:var(--accent);cursor:pointer}
     <h2>¿Quién compra cerdo español? 🌍</h2>
     <p class="slab" id="dem-sum"></p>
     <div class="dem-sort">
-      <button class="dem-tab" data-s="tend">📈 Quién sube / baja</button>
-      <button class="dem-tab" data-s="peso">⚖️ Quién pesa más</button>
+      <button class="dem-tab" data-f="todos">Todos</button>
+      <button class="dem-tab" data-f="sube">📈 Los que suben</button>
+      <button class="dem-tab" data-f="baja">📉 Los que caen</button>
     </div>
     <div id="dem-list"></div>
     <div class="leghint" id="dem-cap" style="margin-top:10px"></div>
@@ -470,33 +471,37 @@ function renderDiario(d){
 }
 /* ===== ¿Quién compra cerdo español? (datos Interporc, trimestrales, actualización manual) ===== */
 const DEMANDA={
-  fuente:'Interporc · 1er trimestre 2026 (ene–mar)',
-  total:'734.900 t exportadas · +1,6% volumen · −14,8% valor',
-  resumen:'La <b>Unión Europea es el 60%</b> de las ventas (Francia, Italia, Portugal, Polonia…): el pan de cada día. Fuera de la UE, <b>Asia se está reordenando</b>: China y Japón cayendo, y <b>Corea del Sur y Vietnam disparados</b>. Ahí es donde se está moviendo la demanda nueva.',
+  fuente:'Interporc (informe SICE, may-2026) · datos de aduanas (DATACOMEX/AEAT) · enero–marzo 2026',
+  total:'734.900 t (+1,6% volumen) pero <b>−14,8% en valor</b> · precio medio 2,57 €/kg (−16,2%)',
+  resumen:'Clave del año: se vende <b>parecido volumen pero se cobra bastante menos</b> (−14,8% en dinero). La demanda se está <b>reordenando</b>: China y Japón caen fuerte, y <b>Vietnam, Corea del Sur, Polonia y el Este de Europa</b> crecen. <b>Francia</b> sigue siendo el primer cliente por dinero.',
   destinos:[
-    {n:'🇪🇺 Unión Europea (bloque)',peso:60,val:'3.405 M€',tend:null,estado:'base',nota:'El cliente nº1 y el más estable: 6 de cada 10 € salen de aquí. Es la base que no falla.'},
-    {n:'🇨🇳 China',peso:15.8,val:'527 M€',tend:-19.9,estado:'baja',nota:'Sigue siendo el nº1 en volumen, pero cayendo fuerte: aranceles chinos del 4,9–19,8% (desde dic-2025) + más autosuficiencia china.'},
-    {n:'🇰🇷 Corea del Sur',peso:null,val:null,tend:46.7,estado:'sube',nota:'El que más sube. Ya es el PRIMER destino fuera de la UE. Aquí está la demanda que crece.'},
-    {n:'🇻🇳 Vietnam',peso:null,val:null,tend:166,estado:'sube',nota:'Disparado (+166%). Mercado emergente que absorbe lo que otros destinos dejan de comprar.'},
-    {n:'🇯🇵 Japón',peso:null,val:null,tend:-61,estado:'baja',nota:'Desplome brutal (−61%). Se ha hundido como destino este año.'},
-    {n:'🇵🇱 Polonia',peso:null,val:null,tend:42.4,estado:'sube',nota:'Sube con fuerza dentro de la propia UE (+42%). Demanda europea recolocándose.'}
+    {n:'🇻🇳 Vietnam',share:null,tend:166,estado:'sube',nota:'Disparado. Mercado emergente que absorbe lo que China y Japón dejan de comprar.'},
+    {n:'🇰🇷 Corea del Sur',share:null,tend:48.3,estado:'sube',nota:'De los que más suben. Se ha vuelto un destino clave fuera de la UE.'},
+    {n:'🇵🇱 Polonia',share:null,tend:42.4,estado:'sube',nota:'Sube con fuerza dentro de la propia UE. Demanda europea recolocándose.'},
+    {n:'🇨🇿 República Checa',share:null,tend:40.1,estado:'sube',nota:'Otro europeo del Este al alza.'},
+    {n:'🇷🇴 Rumanía',share:null,tend:35,estado:'sube',nota:'Demanda del Este de Europa creciendo.'},
+    {n:'🇨🇳 China',share:'15,8% del volumen total',tend:-19.9,estado:'baja',nota:'Sigue siendo el nº1 en volumen, pero cayendo: aranceles chinos (4,9–19,8%, desde dic-2025) + más autosuficiencia. También −34,2% en valor.'},
+    {n:'🇯🇵 Japón',share:null,tend:-61,estado:'baja',nota:'Desplome (−61% volumen, −63% valor). Se ha hundido como destino este año.'},
+    {n:'🇫🇷 Francia',share:'11,9% de la facturación · 1er mercado por valor',tend:null,estado:'base',nota:'El primer cliente por dinero. Mercado UE estable y de proximidad.'}
   ]
 };
-let DEM_SORT='tend';
+let DEM_FILTER='todos';
 function renderDemanda(){
   const D2=DEMANDA;const el=$('dem-sum');if(!el)return;
   el.innerHTML=D2.resumen;
-  $('dem-list').closest('section').querySelectorAll('.dem-tab').forEach(b=>b.classList.toggle('on',b.dataset.s===DEM_SORT));
-  const arr=[...D2.destinos].sort((a,b)=> DEM_SORT==='tend' ? ((b.tend==null?-999:b.tend)-(a.tend==null?-999:a.tend)) : ((b.peso||0)-(a.peso||0)) );
+  const sec=$('dem-list').closest('section');
+  sec.querySelectorAll('.dem-tab').forEach(b=>b.classList.toggle('on',b.dataset.f===DEM_FILTER));
+  const arr=[...D2.destinos].sort((a,b)=>(b.tend==null?-999:b.tend)-(a.tend==null?-999:a.tend))
+    .filter(d=>DEM_FILTER==='todos'?true:d.estado===DEM_FILTER);
   $('dem-list').innerHTML=arr.map(d=>{
     const t=d.tend;const cls=d.estado;
-    const badge = t==null ? '<span class="dem-b base">base · estable</span>'
+    const badge = t==null ? '<span class="dem-b base">estable</span>'
       : '<span class="dem-b '+(t>0?'up':'down')+'">'+(t>0?'▲ +'+fmt(t,1):'▼ −'+fmt(Math.abs(t),1))+'%</span>';
-    const peso = d.peso!=null ? '<span class="dem-peso">'+(d.val?d.val+' · ':'')+d.peso+'% del total</span>' : (d.val?'<span class="dem-peso">'+d.val+'</span>':'');
-    return '<div class="dem-row '+cls+'"><div class="dem-h"><span class="dem-n">'+d.n+'</span>'+badge+'</div>'+(peso?'<div class="dem-p">'+peso+'</div>':'')+'<div class="dem-note">'+d.nota+'</div></div>';
-  }).join('');
-  $('dem-cap').innerHTML='📌 Fuente: <b>'+D2.fuente+'</b> · '+D2.total+'. Son datos <b>trimestrales, con ~2 meses de retraso</b> — es la <b>foto de la demanda, no el precio en vivo</b>. Se actualiza a mano cuando Interporc publica el siguiente informe.';
-  $('dem-list').closest('section').querySelectorAll('.dem-tab').forEach(b=>b.onclick=()=>{DEM_SORT=b.dataset.s;renderDemanda();});
+    const sh = d.share ? '<div class="dem-p"><span class="dem-peso">'+d.share+'</span></div>' : '';
+    return '<div class="dem-row '+cls+'"><div class="dem-h"><span class="dem-n">'+d.n+'</span>'+badge+'</div>'+sh+'<div class="dem-note">'+d.nota+'</div></div>';
+  }).join('') || '<div class="leghint">Sin destinos en este filtro.</div>';
+  $('dem-cap').innerHTML='📌 Fuente: <b>'+D2.fuente+'</b>. Total: '+D2.total+'. Es una <b>foto trimestral con ~2 meses de retraso</b> (demanda, no precio en vivo); porcentajes = variación vs el mismo trimestre de 2025. La actualizo cuando salga el siguiente informe.';
+  sec.querySelectorAll('.dem-tab').forEach(b=>b.onclick=()=>{DEM_FILTER=b.dataset.f;renderDemanda();});
 }
 function renderHist(d){
   $('hist').innerHTML=d.historial.slice(-12).reverse().map(r=>{
