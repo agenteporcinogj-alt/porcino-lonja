@@ -20,6 +20,9 @@ export default {
     let body;
     try { body = await request.json(); } catch { return json({ error: 'bad json' }, 400, cors); }
 
+    // Ping de VISITA: alguien entró a la web (acertó la contraseña), aunque no escriba en el chat.
+    if (body.tipo === 'visita') { await registrarVisita(env, request, body.usuario); return json({ ok: true }, 200, cors); }
+
     const estado = body.estado || {};
     const extra = String(body.extra || '').slice(0, 4000);
     const usuario = String(body.usuario || 'visitante').slice(0, 40);
@@ -118,17 +121,47 @@ const ALIAS = {
 function quien(u) { return ALIAS[u] || u || '?'; }
 function mdLog(s) { return esc(String(s)).replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>').replace(/^#{1,6}\s*/gm, '').replace(/\n/g, '<br>'); }
 
-// Página para ver el historial (protegida con ADMIN_KEY).
+// Registra una VISITA (entrada a la web), con país y hash de IP para contar distintos.
+async function registrarVisita(env, request, usuario) {
+  try {
+    if (!env.LOG) return;
+    const ip = request.headers.get('CF-Connecting-IP') || '';
+    const pais = request.headers.get('CF-IPCountry') || '?';
+    let hh = 0; for (let i = 0; i < ip.length; i++) hh = (hh * 31 + ip.charCodeAt(i)) >>> 0;
+    const iphash = ip ? hh.toString(36) : '';
+    const key = `v:${Date.now()}:${Math.random().toString(36).slice(2, 5)}`;
+    await env.LOG.put(key, 'v', {
+      metadata: { t: new Date().toISOString(), usuario: String(usuario || 'visitante').slice(0, 40), pais, iphash },
+      expirationTtl: 60 * 60 * 24 * 365,
+    });
+  } catch (_) {}
+}
+
+// Página para ver el panel (protegida con ADMIN_KEY): visitas + preguntas.
 async function verLog(url, env, cors) {
   const key = url.searchParams.get('key') || '';
   if (!env.ADMIN_KEY || key !== env.ADMIN_KEY)
     return new Response('No autorizado. Usa ?ver=1&key=TU_ADMIN_KEY', { status: 401, headers: cors });
-  if (!env.LOG) return htmlResp('<h1>🐷 Registro</h1><p>Falta el KV (LOG).</p>', cors);
+  if (!env.LOG) return htmlResp('<h1>🐷 Panel</h1><p>Falta el KV (LOG).</p>', cors);
   const list = await env.LOG.list({ limit: 1000 });
-  const keys = list.keys.filter(k => k.metadata && k.metadata.t).sort((a, b) => (a.metadata.t < b.metadata.t ? 1 : -1));
-  const recientes = keys.slice(0, 60);
+  const all = list.keys.filter(k => k.metadata && k.metadata.t);
+  const visitas = all.filter(k => k.name.startsWith('v:')).sort((a, b) => (a.metadata.t < b.metadata.t ? 1 : -1));
+  const preguntas = all.filter(k => k.name.startsWith('q:')).sort((a, b) => (a.metadata.t < b.metadata.t ? 1 : -1));
+  const distintos = new Set(visitas.map(k => (k.metadata.iphash || '') + '|' + (k.metadata.usuario || '')));
+  let h = '<h1>🐷 Panel · Grupo Jorge</h1>';
+  // ---- Visitas ----
+  h += '<h2>👁 Entradas a la web: ' + visitas.length + ' · ~' + distintos.size + ' dispositivos distintos</h2>';
+  h += '<table><tr><th>Cuándo (Madrid)</th><th>Quién</th><th>País</th></tr>';
+  for (const k of visitas.slice(0, 100)) {
+    const m = k.metadata; const f = new Date(m.t);
+    const cuando = isNaN(f) ? esc(m.t) : f.toLocaleString('es-ES', { timeZone: 'Europe/Madrid' });
+    h += '<tr><td class=t>' + esc(cuando) + '</td><td class=u>' + esc(quien(m.usuario)) + '</td><td>' + esc(m.pais || '?') + '</td></tr>';
+  }
+  h += '</table>';
+  // ---- Preguntas ----
+  const recientes = preguntas.slice(0, 60);
   const answers = await Promise.all(recientes.map(k => env.LOG.get(k.name).catch(() => '')));
-  let h = '<h1>🐷 Historial del chatbot · ' + keys.length + ' preguntas (últimas ' + recientes.length + ')</h1>';
+  h += '<h2>💬 Preguntas al chatbot: ' + preguntas.length + ' (últimas ' + recientes.length + ')</h2>';
   h += '<table><tr><th>Cuándo (Madrid)</th><th>Quién</th><th>Pregunta</th><th>Respuesta</th></tr>';
   recientes.forEach((k, i) => {
     const m = k.metadata; const f = new Date(m.t);
@@ -140,7 +173,7 @@ async function verLog(url, env, cors) {
   return htmlResp(h, cors);
 }
 function htmlResp(inner, cors) {
-  const css = 'body{font-family:system-ui,Arial;background:#141414;color:#eee;margin:0;padding:16px}h1{font-size:1.1rem}table{border-collapse:collapse;width:100%;font-size:.86rem}td,th{border-bottom:1px solid #333;padding:8px;text-align:left;vertical-align:top}th{color:#e0a35b}.u{color:#5b8def;font-weight:600;white-space:nowrap}.t{color:#888;white-space:nowrap;font-size:.76rem}.r{color:#bbb;max-width:420px}';
+  const css = 'body{font-family:system-ui,Arial;background:#141414;color:#eee;margin:0;padding:16px}h1{font-size:1.15rem}h2{font-size:.98rem;color:#e0a35b;margin:22px 0 8px}table{border-collapse:collapse;width:100%;font-size:.86rem;margin-bottom:10px}td,th{border-bottom:1px solid #333;padding:8px;text-align:left;vertical-align:top}th{color:#999;font-weight:600}.u{color:#5b8def;font-weight:600;white-space:nowrap}.t{color:#888;white-space:nowrap;font-size:.76rem}.r{color:#bbb;max-width:420px}';
   return new Response('<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Historial · Grupo Jorge</title><style>' + css + '</style>' + inner, { status: 200, headers: { ...cors, 'content-type': 'text/html; charset=utf-8' } });
 }
 function esc(s) { return String(s).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c])); }
