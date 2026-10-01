@@ -122,16 +122,26 @@ function quien(u) { return ALIAS[u] || u || '?'; }
 function mdLog(s) { return esc(String(s)).replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>').replace(/^#{1,6}\s*/gm, '').replace(/\n/g, '<br>'); }
 
 // Registra una VISITA (entrada a la web), con país y hash de IP para contar distintos.
+function parseUA(ua) {
+  ua = ua || '';
+  let os = '?';
+  if (/iphone/i.test(ua)) os = 'iPhone'; else if (/ipad/i.test(ua)) os = 'iPad';
+  else if (/android/i.test(ua)) os = 'Android'; else if (/windows/i.test(ua)) os = 'Windows';
+  else if (/mac os|macintosh/i.test(ua)) os = 'Mac'; else if (/linux/i.test(ua)) os = 'Linux';
+  let br = '?';
+  if (/edg\//i.test(ua)) br = 'Edge'; else if (/chrome|crios/i.test(ua)) br = 'Chrome';
+  else if (/firefox|fxios/i.test(ua)) br = 'Firefox'; else if (/safari/i.test(ua)) br = 'Safari';
+  return os + ' · ' + br;
+}
 async function registrarVisita(env, request, usuario) {
   try {
     if (!env.LOG) return;
-    const ip = request.headers.get('CF-Connecting-IP') || '';
+    const ip = request.headers.get('CF-Connecting-IP') || '?';
     const pais = request.headers.get('CF-IPCountry') || '?';
-    let hh = 0; for (let i = 0; i < ip.length; i++) hh = (hh * 31 + ip.charCodeAt(i)) >>> 0;
-    const iphash = ip ? hh.toString(36) : '';
+    const disp = parseUA(request.headers.get('User-Agent'));
     const key = `v:${Date.now()}:${Math.random().toString(36).slice(2, 5)}`;
     await env.LOG.put(key, 'v', {
-      metadata: { t: new Date().toISOString(), usuario: String(usuario || 'visitante').slice(0, 40), pais, iphash },
+      metadata: { t: new Date().toISOString(), usuario: String(usuario || 'visitante').slice(0, 40), pais, ip, disp },
       expirationTtl: 60 * 60 * 24 * 365,
     });
   } catch (_) {}
@@ -147,15 +157,15 @@ async function verLog(url, env, cors) {
   const all = list.keys.filter(k => k.metadata && k.metadata.t);
   const visitas = all.filter(k => k.name.startsWith('v:')).sort((a, b) => (a.metadata.t < b.metadata.t ? 1 : -1));
   const preguntas = all.filter(k => k.name.startsWith('q:')).sort((a, b) => (a.metadata.t < b.metadata.t ? 1 : -1));
-  const distintos = new Set(visitas.map(k => (k.metadata.iphash || '') + '|' + (k.metadata.usuario || '')));
+  const distintos = new Set(visitas.map(k => (k.metadata.ip || k.metadata.iphash || '') + '|' + (k.metadata.disp || '')));
   let h = '<h1>🐷 Panel · Grupo Jorge</h1>';
   // ---- Visitas ----
-  h += '<h2>👁 Entradas a la web: ' + visitas.length + ' · ~' + distintos.size + ' dispositivos distintos</h2>';
-  h += '<table><tr><th>Cuándo (Madrid)</th><th>Quién</th><th>País</th></tr>';
-  for (const k of visitas.slice(0, 100)) {
+  h += '<h2>👁 Entradas a la web: ' + visitas.length + ' · ~' + distintos.size + ' dispositivos/IP distintos</h2>';
+  h += '<table><tr><th>Cuándo (Madrid)</th><th>Quién</th><th>País</th><th>IP</th><th>Dispositivo</th></tr>';
+  for (const k of visitas.slice(0, 120)) {
     const m = k.metadata; const f = new Date(m.t);
     const cuando = isNaN(f) ? esc(m.t) : f.toLocaleString('es-ES', { timeZone: 'Europe/Madrid' });
-    h += '<tr><td class=t>' + esc(cuando) + '</td><td class=u>' + esc(quien(m.usuario)) + '</td><td>' + esc(m.pais || '?') + '</td></tr>';
+    h += '<tr><td class=t>' + esc(cuando) + '</td><td class=u>' + esc(quien(m.usuario)) + '</td><td>' + esc(m.pais || '?') + '</td><td class=t>' + esc(m.ip || '?') + '</td><td>' + esc(m.disp || '?') + '</td></tr>';
   }
   h += '</table>';
   // ---- Preguntas ----
