@@ -691,7 +691,7 @@ function initChat(){
     document.addEventListener('webkitfullscreenchange',onFsChange);
   }
   if(!$('cbody').dataset.init){$('cbody').dataset.init='1';
-    setTimeout(()=>{addBub('¡Hola! 👋 Soy tu analista porcino con <b>IA</b>. La predicción de esta semana es <b>'+fmt(D.prediccion.v)+' €/kg</b>. Pregúntame lo que quieras con tus palabras — precio, por qué, si vendo o aguanto, los vecinos… te respondo con los <b>datos reales</b> del modelo, sin inventar nada.','bot');},350);
+    setTimeout(()=>{addBub('¡Hola! 👋 Soy tu analista porcino con <b>IA</b>. La predicción para la semana que viene es <b>'+fmt(D.prediccion.v,3)+' €/kg</b>. Pregúntame lo que quieras con tus palabras — precio, por qué, si vendo o aguanto, los vecinos… te respondo con los <b>datos reales</b> del modelo, sin inventar nada.','bot');},350);
     loadEmb();}
 }
 function addBub(html,cls){const b=document.createElement('div');b.className='bub '+cls;b.innerHTML=html;$('cbody').appendChild(b);$('cbody').scrollTop=$('cbody').scrollHeight;return b;}
@@ -723,6 +723,7 @@ function buildEstado(){
       contribuciones:D.contrib,
       vecinos:D.vecinos,
       precision:D.precision,
+      precision_en_vivo:(function(){try{const rr=(D.historial||[]).filter(r=>r.real&&!((r.backtest!==undefined)?r.backtest:(Number(r.semana)<=39)));const e=rr.map(r=>parseFloat(String(r.error).replace(',','.'))).filter(x=>!isNaN(x));return e.length?{semanas:e.length,error_cts:Math.round(e.reduce((a,b)=>a+b,0)/e.length*10)/10}:{semanas:0,error_cts:null};}catch(_){return {semanas:0,error_cts:null};}})(),
       semaforo:D.semaforo,
       escenarios:D.escenarios,
       eventos:D.eventos,
@@ -731,18 +732,18 @@ function buildEstado(){
       serie_paises:(function(){const sp=D.serie_paises;if(!sp)return null;const n=(sp.labels||[]).length,a=Math.max(0,n-52);const cut=x=>(x||[]).slice(a);return {etiquetas:(sp.labels||[]).slice(a).map(l=>'s'+l.w+'/'+String(l.y).slice(2)),espana:cut(sp.esp),francia:cut(sp.fra),alemania:cut(sp.ale),dinamarca:cut(sp.din)};})(),
       proyeccion_anual:(function(){
         try{
-          const lastv=D.ultimo.v,lw=D.ultimo.w,ly=D.ultimo.y,seas=D.seas||{};
-          const sref=seas[String(lw)]||100;const et=[],ce=[],lo=[],hi=[];
-          for(let i=1;i<=52;i++){
-            const fw=((lw-1+i)%52)+1,fy=ly+Math.floor((lw-1+i)/52);
-            const sf=seas[String(fw)]||sref;const central=lastv*(sf/sref);
-            const w=(1.0+1.5*Math.sqrt(i))/100; // semiancho €, crece con el horizonte (random-walk)
+          const pv=D.prediccion.v,pw=D.prediccion.w,py=D.prediccion.y,seas=D.seas||{};  // ANCLADA a la prediccion real del modelo
+          const sref=seas[String(pw)]||100;const et=[],ce=[],lo=[],hi=[];
+          for(let i=0;i<52;i++){                           // i=0 = la semana predicha (arranca EXACTO en la prediccion)
+            const fw=((pw-1+i)%52)+1,fy=py+Math.floor((pw-1+i)/52);
+            const sf=seas[String(fw)]||sref;const central=pv*(sf/sref);
+            const w=(1.2+1.4*Math.sqrt(i))/100; // semiancho €, crece con el horizonte
             et.push('s'+fw+'/'+String(fy).slice(2));
             ce.push(Math.round(central*1000)/1000);
             lo.push(Math.round((central-w)*1000)/1000);
             hi.push(Math.round((central+w)*1000)/1000);
           }
-          return {etiquetas:et,central:ce,banda_baja:lo,banda_alta:hi,nota:'Proyeccion ESTACIONAL (patron de 17 anos) desde el ultimo real; la banda se abre con el horizonte. NO es prediccion semanal precisa, es planificacion.'};
+          return {etiquetas:et,central:ce,banda_baja:lo,banda_alta:hi,nota:'Proyeccion ESTACIONAL anclada a la prediccion real del modelo ('+pv+' en '+et[0]+'); de ahi sigue el patron de 17 anos. La banda se abre con el horizonte. NO es prediccion semanal precisa mas alla de 1-2 semanas, es planificacion.'};
         }catch(e){return null;}
       })(),
       generado:D.generado,
@@ -791,8 +792,14 @@ Luego responde directo y útil, sin soltar todo el razonamiento interno. Si dete
 \`\`\`
 y en el texto explicas el resultado ("unos 211.000 €").
 
+== FIABILIDAD (muy importante, cero humo) ==
+Cuando hables de lo fiable que es el modelo, distingue SIEMPRE dos cosas y prioriza la de EN VIVO:
+- EN VIVO (lo real): usa ESTADO.precision_en_vivo → "error medio de X cts en N semanas reales validadas contra Mercolleida". Si N es pequeño (1-2), dilo: "es pronto, pocas semanas".
+- Backtest (simulación de 17 años): ESTADO.precision.modelo_cts (~0,7 cts). Es un ensayo sobre el pasado, NO rendimiento real. Cítalo solo como contexto, nunca como "lo que acierta de verdad".
+Nunca mezcles los dos como si fueran lo mismo.
+
 == HORIZONTES: sé honesto con la precisión según cuánto tiempo vista ==
-- 1 semana: preciso (el modelo acierta a ~1 céntimo). Aquí puedes dar número firme.
+- 1 semana: lo más preciso del modelo. Aquí puedes dar número firme (a 3 decimales).
 - 2-6 semanas: aproximado, el margen crece. Da número pero avisa del margen.
 - Meses / 1 año: NO es predicción precisa, es PLANIFICACIÓN. Da un recorrido con escenarios y bandas que se ABREN con el tiempo. Nunca un número clavado para dentro de 8 meses.
 - Explica, si viene al caso, que el modelo se AUTO-MEJORA cada semana: entra el precio real nuevo y afina la predicción siguiente (es rodante). Por eso preguntar "próximas semanas" sale mejor que "el año entero de golpe".
