@@ -82,7 +82,8 @@ Responde en español. Ajusta la longitud a la pregunta: breve si es simple, y si
         body: JSON.stringify({ model: modelo, max_tokens: 1400, system, messages: mensajes }),
       });
       const data = await r.json();
-      respuesta = data?.content?.[0]?.text
+      const bloque = (data?.content || []).find(c => c && c.type === 'text');  // Sonnet/Opus pueden meter un bloque 'thinking' antes
+      respuesta = bloque?.text
         || (data?.error?.message ? '⚠️ ' + data.error.message : 'No he podido responder ahora mismo, prueba otra vez.');
     } catch (e) {
       respuesta = 'No he podido conectar ahora mismo, prueba otra vez en un momento.';
