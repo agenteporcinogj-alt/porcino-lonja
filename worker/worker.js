@@ -79,15 +79,12 @@ Responde en español. Ajusta la longitud a la pregunta: breve si es simple, y si
 
     let respuesta;
     try {
-      const r = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: { 'x-api-key': env.ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
-        body: JSON.stringify({ model: modelo, max_tokens: 1400, system, messages: mensajes }),
-      });
-      const data = await r.json();
-      const bloque = (data?.content || []).find(c => c && c.type === 'text');  // Sonnet/Opus pueden meter un bloque 'thinking' antes
-      respuesta = bloque?.text
-        || (data?.error?.message ? '⚠️ ' + data.error.message : 'No he podido responder ahora mismo, prueba otra vez.');
+      let out = await pedirAnthropic(env, modelo, system, mensajes);
+      // Red de seguridad: si devuelve texto vacío (p.ej. el thinking agotó los tokens), reintenta en Haiku.
+      if (!out.text && !out.err && modelo !== 'claude-haiku-4-5-20251001') {
+        out = await pedirAnthropic(env, 'claude-haiku-4-5-20251001', system, mensajes);
+      }
+      respuesta = out.text || (out.err ? '⚠️ ' + out.err : 'No he podido responder ahora mismo, prueba otra vez.');
     } catch (e) {
       respuesta = 'No he podido conectar ahora mismo, prueba otra vez en un momento.';
     }
@@ -132,4 +129,14 @@ function htmlResp(inner, cors) {
   return new Response('<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Historial · Grupo Jorge</title><style>' + css + '</style>' + inner, { status: 200, headers: { ...cors, 'content-type': 'text/html; charset=utf-8' } });
 }
 function esc(s) { return String(s).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c])); }
+async function pedirAnthropic(env, model, system, mensajes) {
+  const r = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: { 'x-api-key': env.ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
+    body: JSON.stringify({ model, max_tokens: 4000, system, messages: mensajes }),
+  });
+  const data = await r.json();
+  const bloque = (data?.content || []).find(c => c && c.type === 'text'); // Sonnet/Opus pueden meter 'thinking' antes
+  return { text: bloque?.text || '', err: data?.error?.message || '' };
+}
 function json(obj, status, cors) { return new Response(JSON.stringify(obj), { status, headers: { ...cors, 'content-type': 'application/json' } }); }
