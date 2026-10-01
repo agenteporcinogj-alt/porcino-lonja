@@ -130,8 +130,10 @@ td:first-child,th:first-child{text-align:left}
 .chat-head .nm{font-weight:600;font-size:.95rem}.chat-head .st{font-size:.72rem;color:var(--good)}
 .fsbtn{border:1px solid var(--line);background:var(--surface);color:var(--muted);border-radius:9px;width:34px;height:34px;font-size:1.1rem;cursor:pointer;flex:none;line-height:1}
 .fsbtn:hover{border-color:var(--accent);color:var(--accent)}
-.chat.fs{position:fixed;inset:0;z-index:1000;border-radius:0;display:flex;flex-direction:column;max-height:100vh}
-.chat.fs .chat-body{max-height:none;flex:1}
+.chat:fullscreen,.chat:-webkit-full-screen{width:100vw;height:100vh;border-radius:0;display:flex;flex-direction:column;background:var(--surface)}
+.chat:fullscreen .chat-body,.chat:-webkit-full-screen .chat-body{max-height:none;flex:1}
+.chat:fullscreen .chat-head,.chat:-webkit-full-screen .chat-head{flex:none}
+.chat:fullscreen .chips,.chat:fullscreen .chat-input,.chat:-webkit-full-screen .chips,.chat:-webkit-full-screen .chat-input{flex:none}
 .chat-head #whoami{width:92px;padding:6px 9px;border:1px solid var(--line);border-radius:14px;background:var(--surface);color:var(--ink);font-size:.78rem;font-family:inherit}
 .chat-head #whoami:focus{outline:2px solid var(--accent)}
 .chat-body{padding:14px;display:flex;flex-direction:column;gap:10px;max-height:420px;overflow-y:auto}
@@ -666,7 +668,14 @@ function initChat(){
   $('chips').querySelectorAll('.chip').forEach(b=>b.onclick=()=>ask(b.textContent));
   $('csend').onclick=()=>{if($('cin').value.trim())ask($('cin').value.trim());};
   $('cin').addEventListener('keydown',e=>{if(e.key==='Enter'&&$('cin').value.trim())ask($('cin').value.trim());});
-  const fsb=$('chatfs');if(fsb)fsb.onclick=()=>{const c=document.querySelector('.chat');const on=c.classList.toggle('fs');fsb.textContent=on?'✕':'⛶';fsb.title=on?'Salir de pantalla completa':'Pantalla completa';document.body.style.overflow=on?'hidden':'';$('cbody').scrollTop=$('cbody').scrollHeight;};
+  const fsb=$('chatfs');
+  if(fsb){
+    const c=document.querySelector('.chat');
+    fsb.onclick=()=>{ try{ if(!document.fullscreenElement&&!document.webkitFullscreenElement){ (c.requestFullscreen||c.webkitRequestFullscreen).call(c); } else { (document.exitFullscreen||document.webkitExitFullscreen).call(document); } }catch(e){ c.classList.toggle('fs'); } };
+    const onFsChange=()=>{ const on=!!(document.fullscreenElement||document.webkitFullscreenElement); c.classList.toggle('fs',on); fsb.textContent=on?'✕':'⛶'; fsb.title=on?'Salir':'Pantalla completa'; setTimeout(()=>{$('cbody').scrollTop=$('cbody').scrollHeight;},50); };
+    document.addEventListener('fullscreenchange',onFsChange);
+    document.addEventListener('webkitfullscreenchange',onFsChange);
+  }
   if(!$('cbody').dataset.init){$('cbody').dataset.init='1';
     setTimeout(()=>{addBub('¡Hola! 👋 Soy tu analista porcino con <b>IA</b>. La predicción de esta semana es <b>'+fmt(D.prediccion.v)+' €/kg</b>. Pregúntame lo que quieras con tus palabras — precio, por qué, si vendo o aguanto, los vecinos… te respondo con los <b>datos reales</b> del modelo, sin inventar nada.','bot');},350);
     loadEmb();}
