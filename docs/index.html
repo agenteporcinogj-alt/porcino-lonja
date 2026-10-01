@@ -252,7 +252,7 @@ footer a{color:var(--accent);cursor:pointer}
     <h2>Pregúntale al modelo</h2>
     <p class="slab">Habla con el asistente como con una IA. Responde con los datos reales, sin inventarse nada.</p>
     <div class="chat">
-      <div class="chat-head"><div class="av">🐷</div><div style="flex:1"><div class="nm">Asistente Porcino</div><div class="st">● en línea · datos de hoy</div></div><input id="whoami" placeholder="tu nombre" autocomplete="off" title="Para saber quién pregunta (opcional)"></div>
+      <div class="chat-head"><div class="av">🐷</div><div><div class="nm">Asistente Porcino</div><div class="st">● en línea · datos de hoy</div></div></div>
       <div class="chat-body" id="cbody"></div>
       <div class="chips" id="chips"></div>
       <div class="chat-input">
@@ -658,7 +658,6 @@ async function routeScored(q){
 }
 const CHIPS=['¿Qué precio esperas?','¿Por qué?','¿Vendo o aguanto?','📈 Dibuja el precio del último año','📊 Compara España vs Francia','🧮 ¿Cuánto me juego esta semana?','¿Es fiable?','¿Y si hay PPA o China?'];
 function initChat(){
-  initWhoami();
   $('chips').innerHTML=CHIPS.map(c=>'<button class="chip">'+c+'</button>').join('');
   $('chips').querySelectorAll('.chip').forEach(b=>b.onclick=()=>ask(b.textContent));
   $('csend').onclick=()=>{if($('cin').value.trim())ask($('cin').value.trim());};
@@ -672,9 +671,7 @@ function showTyping(){const t=document.createElement('div');t.className='typing'
 /* ===== Puente al cerebro Claude (Cloudflare Worker) ===== */
 const WORKER='https://porcino-chat.agenteporcinogj.workers.dev/';
 const QUICK={saludo:1,gracias:1};            // estas se responden en local (gratis, instantáneo)
-function chatUser(){try{const n=(localStorage.getItem('cu_name')||'').trim();if(n)return n.slice(0,40);let id=localStorage.getItem('cu_id');if(!id){id='visitante-'+Math.random().toString(36).slice(2,6);localStorage.setItem('cu_id',id);}return id;}catch(e){return 'visitante';}}
-function setChatName(n){try{localStorage.setItem('cu_name',n);}catch(e){}}
-function initWhoami(){try{const el=$('whoami');if(!el)return;el.value=(localStorage.getItem('cu_name')||'');el.addEventListener('input',()=>setChatName(el.value.trim()));}catch(e){}}
+function chatUser(){try{let id=localStorage.getItem('cu_id');if(!id){id='visitante-'+Math.random().toString(36).slice(2,6);localStorage.setItem('cu_id',id);}return id;}catch(e){return 'visitante';}}
 let NEEDNAME=false;
 function mdToHtml(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\*\*([^*]+)\*\*/g,'<b>$1</b>').replace(/\n/g,'<br>');}
 function buildEstado(){
