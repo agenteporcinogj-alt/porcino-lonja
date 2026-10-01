@@ -250,7 +250,7 @@ footer a{color:var(--accent);cursor:pointer}
 
   <div class="row rise">
     <div class="card"><div class="k">Último dato real</div><div class="v tnum"><span id="lastv"></span> €</div><div class="u" id="lastw"></div></div>
-    <div class="card"><div class="k">Fiabilidad <span class="btag">backtest</span></div><div class="v tnum"><span id="prec"></span> cts</div><div class="u">error medio en <b>17 años de simulación</b> (acierta ≤2 cts el <span id="within"></span>%) · <b>aún sin validar en vivo</b> — 1ª real: sem 40</div></div>
+    <div class="card"><div class="k">Fiabilidad <span class="btag" id="fiab-tag">backtest</span></div><div class="v tnum"><span id="prec"></span> cts</div><div class="u" id="fiab-sub"></div></div>
   </div>
 
   <!-- CHAT ASISTENTE -->
@@ -385,7 +385,21 @@ function render(d){
   animateNum($('predv'),d.prediccion.v,3);
   const dl=d.delta_cts;$('delta').innerHTML='<span class="'+(dl>0?'up-t':dl<0?'down-t':'')+'">'+(dl>0?'▲':dl<0?'▼':'▬')+' '+scts(dl)+' vs la semana pasada</span>';
   $('lastv').textContent=fmt(d.ultimo.v,3);$('lastw').textContent='semana '+d.ultimo.w+' · '+d.ultimo.y;
-  $('prec').textContent=fmt(d.precision.modelo_cts,1);$('within').textContent=d.precision.within2;
+  // Fiabilidad: si hay predicciones REALES validadas (no backtest), muestra el acierto EN VIVO; si no, el backtest.
+  (function(){
+    const reales=(d.historial||[]).filter(r=>r.real&&!((r.backtest!==undefined)?r.backtest:(Number(r.semana)<=39)));
+    const errs=reales.map(r=>parseFloat(String(r.error).replace(',','.'))).filter(x=>!isNaN(x));
+    if(errs.length>=1){
+      const mae=errs.reduce((a,b)=>a+b,0)/errs.length;
+      $('prec').textContent=fmt(mae,1);
+      $('fiab-tag').textContent='EN VIVO';$('fiab-tag').style.color='var(--good)';
+      $('fiab-sub').innerHTML='error medio en <b>'+errs.length+' semana'+(errs.length>1?'s':'')+' REAL'+(errs.length>1?'ES':'')+'</b> (validada'+(errs.length>1?'s':'')+' contra Mercolleida). En simulación de 17 años: '+fmt(d.precision.modelo_cts,1)+' cts.';
+    }else{
+      $('prec').textContent=fmt(d.precision.modelo_cts,1);
+      $('fiab-tag').textContent='backtest';
+      $('fiab-sub').innerHTML='error medio en <b>17 años de simulación</b> (acierta ≤2 cts el '+d.precision.within2+'%) · <b>aún sin validar en vivo</b>';
+    }
+  })();
   renderWhy(d);renderEsc(d);renderEvt(d);renderHist(d);renderDemanda();drawChart(d.serie);drawComov(d.serie_paises);
   initChat();
 }
