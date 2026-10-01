@@ -398,7 +398,7 @@ function renderWhy(d){
   // resumen en cristiano
   let sum='El modelo prevé <b>'+scts(d.delta_cts)+'</b> para la semana que viene, y sale de sumar estas fuerzas: ';
   const dr=[];
-  if(Math.abs(c.francia)>=0.2)dr.push('Francia '+(fr>0?'subió':'bajó')+' '+fmt(Math.abs(fr),1)+' cts y arrastra a España ('+scts(c.francia)+')');
+  if(Math.abs(c.francia)>=0.2)dr.push('Francia '+(fr>0?'subió':'bajó')+' '+fmt(Math.abs(fr),1)+' cts, pero a España solo le llega una parte (los mercados no se copian al 100%) → <b>'+scts(c.francia)+'</b>');
   if(Math.abs(c.alemania)>=0.2)dr.push('Alemania '+(al>0?'también empuja arriba':'también tira abajo')+' ('+scts(c.alemania)+')');
   if(Math.abs(c.estacional)>=0.2)dr.push('la época del año '+(c.estacional>0?'empuja arriba':'tira abajo')+' ('+scts(c.estacional)+')');
   if(Math.abs(c.inercia)>=0.2)dr.push('el propio precio traía inercia');
@@ -407,7 +407,7 @@ function renderWhy(d){
   // datos de la cascada
   const facts=[
     {n:'Precio España',ic:'📉',v:c.inercia,exp:'<b>Inercia del propio precio.</b> España venía moviéndose, y ese impulso se mantiene un poco la semana siguiente.'},
-    {n:'Francia',ic:'🇫🇷',v:c.francia,exp:'<b>Francia va ~1 semana por delante.</b> '+(fr>0?'Subió ':'Bajó ')+fmt(Math.abs(fr),1)+' cts la semana pasada → tira de España '+scts(c.francia)+'.'},
+    {n:'Francia',ic:'🇫🇷',v:c.francia,exp:'<b>Francia va ~1 semana por delante.</b> '+(fr>0?'Subió ':'Bajó ')+fmt(Math.abs(fr),1)+' cts. España NO copia el 100% — solo ~1/6 de lo de Francia → aporta '+scts(c.francia)+'.'},
     {n:'Alemania',ic:'🇩🇪',v:c.alemania,exp:'<b>Alemania también adelanta a España.</b> '+(al>0?'Subió ':'Bajó ')+fmt(Math.abs(al),1)+' cts la semana pasada → aporta '+scts(c.alemania)+'.'},
     {n:'Época del año',ic:'📅',v:c.estacional,exp:'<b>Estacionalidad.</b> Por estas fechas el precio, según el histórico de muchos años, suele '+(c.estacional>0?'subir':'bajar')+' → '+scts(c.estacional)+'.'}
   ];
