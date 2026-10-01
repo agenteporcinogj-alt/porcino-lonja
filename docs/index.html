@@ -187,7 +187,10 @@ td:first-child,th:first-child{text-align:left}
 #diario .dv{font-weight:600;font-family:"IBM Plex Mono",monospace;font-size:.92rem;text-align:right}
 #diario .dsep{margin:11px 0 3px;font-size:.82rem;font-weight:600;color:var(--accent)}
 #diario .dnote{margin-top:10px;font-size:.8rem;color:var(--muted);line-height:1.45;word-break:break-word}
-.bub .chatchart{margin:9px 0 4px;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:9px 9px 5px}
+.bub .chatchart{position:relative;margin:9px 0 4px;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:9px 9px 5px}
+.bub .chatchart .cc-cov{cursor:crosshair}
+.bub .chatchart .cc-tip{position:absolute;width:146px;box-sizing:border-box;pointer-events:none;background:var(--surface2);border:1px solid var(--line);border-radius:7px;padding:5px 8px;font-size:.74rem;line-height:1.35;color:var(--ink);opacity:0;transition:opacity .1s;z-index:5}
+.bub .chatchart .cc-tip b{color:var(--accent)}
 .bub .chatchart .cct{font-size:.82rem;font-weight:600;color:var(--ink);margin:0 2px 6px}
 .bub .chatchart svg{width:100%;height:auto;display:block}
 .bub .chatchart .cleg{display:flex;flex-wrap:wrap;gap:9px;margin-top:5px;padding:0 2px}
@@ -689,27 +692,80 @@ function buildEstado(){
       historial:(D.historial||[]).slice(-10),
       serie_precio:(function(){const s=(D.serie||[]).slice(-60);return {etiquetas:s.map(p=>'s'+p.w+'/'+String(p.y).slice(2)),precios:s.map(p=>p.v)};})(),
       serie_paises:(function(){const sp=D.serie_paises;if(!sp)return null;const n=(sp.labels||[]).length,a=Math.max(0,n-52);const cut=x=>(x||[]).slice(a);return {etiquetas:(sp.labels||[]).slice(a).map(l=>'s'+l.w+'/'+String(l.y).slice(2)),espana:cut(sp.esp),francia:cut(sp.fra),alemania:cut(sp.ale),dinamarca:cut(sp.din)};})(),
+      proyeccion_anual:(function(){
+        try{
+          const lastv=D.ultimo.v,lw=D.ultimo.w,ly=D.ultimo.y,seas=D.seas||{};
+          const sref=seas[String(lw)]||100;const et=[],ce=[],lo=[],hi=[];
+          for(let i=1;i<=52;i++){
+            const fw=((lw-1+i)%52)+1,fy=ly+Math.floor((lw-1+i)/52);
+            const sf=seas[String(fw)]||sref;const central=lastv*(sf/sref);
+            const w=(1.0+1.5*Math.sqrt(i))/100; // semiancho €, crece con el horizonte (random-walk)
+            et.push('s'+fw+'/'+String(fy).slice(2));
+            ce.push(Math.round(central*1000)/1000);
+            lo.push(Math.round((central-w)*1000)/1000);
+            hi.push(Math.round((central+w)*1000)/1000);
+          }
+          return {etiquetas:et,central:ce,banda_baja:lo,banda_alta:hi,nota:'Proyeccion ESTACIONAL (patron de 17 anos) desde el ultimo real; la banda se abre con el horizonte. NO es prediccion semanal precisa, es planificacion.'};
+        }catch(e){return null;}
+      })(),
       generado:D.generado,
       ultima_lectura_cartero:D.diario||null
     };
   }catch(e){return {};}
 }
+/* Ficha de empresa + dossier de mercado (conocimiento fijo, curado) que acompaña al cerebro */
+const FICHA_EMPRESA=`FICHA DE GRUPO JORGE (datos reales de la empresa; úsalos, NUNCA los inventes ni redondees a lo loco):
+- Capacidad: ~1.500.000 plazas de cebo, repartidas en ~700 granjas de cebo (media ~2.000 plazas/granja).
+- Sacrificio: ~55.000 cerdos/semana, de ~120 kg cada uno.
+- Sensibilidad: 1 céntimo/kg = ~66.000 €/semana (55.000 × 120 × 0,01) ≈ 3,43 M€/año.
+- Es PRODUCTOR/vendedor: un precio que BAJA le PERJUDICA (cobra menos por sus cerdos); uno que SUBE le beneficia.
+- Dato sensible: lo del "juicio de densidades" afecta a un % de esas 1,5M plazas; NO digas "~740 cebos" (eso es falso). Si no tienes el % exacto, di que supondría perder "un porcentaje de la capacidad de cebo" sin cerrar una cifra.`;
+const DOSSIER_MERCADO=`DOSSIER DE MERCADO (contexto verificado a oct-2026; es tu conocimiento de fondo, cítalo con criterio, no como predicción):
+- Situación 2026: mucha carne de cerdo en Europa (sobreoferta), precios de exportación tocados. España exportó +1,6% en volumen pero −14,8% en valor en el 1T (precio medio 2,57 €/kg, −16,2%): el problema es el PRECIO, no perder clientes.
+- PPA (peste porcina africana): España tiene brotes que se agravan hacia finales de noviembre. La PPA dispara BLOQUEOS SANITARIOS de terceros países al cerdo español (China, Japón vetan por sanidad, no por falta de ganas). Un veto puede REABRIR cuando se controle; no es demanda perdida para siempre.
+- China: 1er destino en volumen (15,8%) pero cayendo (−19,9% vol, −34,2% valor) por aranceles chinos (4,9–19,8%, desde dic-2025) + más autosuficiencia china. ~116.000 t/trimestre (~8.900 t/semana): es el gigante.
+- Japón: −61% (probable bloqueo sanitario por PPA). Corea del Sur (+48%), Vietnam (+166%), Polonia, Chequia, Rumanía crecen, PERO son MUCHO más pequeños (Vietnam en todo 2024 = 17.367 t = lo que China compra en ~2 semanas). En toneladas los nuevos sí compensan; en dinero no.
+- Ciclo biológico clave (tesis de recuperación): desde que se sacrifica una cerda madre hasta que sus crías dejan de llegar a matadero pasan ~6 meses. Si en nov-dic 2026 se sacrifica ~5% de la cabaña europea de cerdas, el efecto en precios llegaría hacia mayo-junio 2027.
+- Estacionalidad (17 años): enero es el suelo (~−11% sobre la media), verano (julio) el pico (~+9%, barbacoas + exportación). El modelo ya tiene esto dentro.
+- Evento vigilado: juicio de densidades (Aragón, 6-7 oct 2026): si se aplica la norma de bienestar (menos densidad), baja la oferta española → podría empujar el precio arriba.`;
 /* ===== HERRAMIENTAS del chat: calculadora exacta + gráficas de verdad ===== */
-const EXTRA_INSTR=`HERRAMIENTAS QUE PUEDES USAR (al usuario le encantan; úsalas cuando aporten, no las menciones si no hacen falta):
+const EXTRA_INSTR=`== CÓMO DEBES COMPORTARTE (muy importante, esto define si eres útil o un becario pesado) ==
 
-1) CALCULADORA EXACTA — cuando hagas CUALQUIER cálculo (impacto en €, proyecciones, diferencias, medias), NO lo hagas de cabeza: mete la operación en un bloque calc y el sistema la calcula exacta. REGLAS ESTRICTAS del bloque calc: UNA sola línea, SOLO números y signos + - * / ( ) . — NADA de texto, NADA de €, NADA de separador de miles (escribe 55000, no 55.000), NADA de "=", punto para decimales. El razonamiento va FUERA, en el texto normal. Ejemplo correcto:
+1) EJECUTA, no interrogues. Si te dan una orden clara ("hazme la gráfica", "reajústala con esta hipótesis"), HAZLA ya. Como MUCHO UNA pregunta, y solo si de verdad no puedes seguir sin ella. Nada de terminar cada mensaje con "¿y tú qué opinas?", "¿lo ves realista?", "¿estás seguro?". Entrega la cosa y, si acaso, ofrece ajustarla en una frase.
+
+2) TEN CRITERIO PROPIO, no seas pelota. Si el usuario te da su opinión o un número y difiere del modelo, NO te rindas al instante ("tienes razón, tu número es mejor"). Muestra las DOS visiones con su evidencia: "el modelo dice X por [datos]; tú ves Y; si se cumple tu hipótesis pasaría Z". Un analista que da la razón a todo no vale nada.
+
+3) ENTIENDE ERRATAS Y LENGUAJE SUELTO. Si ves un fallo obvio de tecleo ("grafpca"→gráfica, "precjo"→precio, "vrncs"→vecinos), interpreta la intención y sigue sin trabarte. Entiende frases coloquiales, a medias, afirmaciones sueltas, preguntas cortas de seguimiento ("y eso?", "desarrolla", "en serio?"). Razona qué quiere decir y responde a eso; no pidas que reformule salvo que sea imposible de adivinar.
+
+4) PRECIOS SIEMPRE A 3 DECIMALES. Cualquier cotización/baremo del cerdo va a 3 decimales (ej. 1,283 €/kg, no 1,28). Es como cotiza la Lonja (Cerdo Blanco). Esto es OBLIGATORIO.
+
+5) CERO INVENTOS. Los números salen del ESTADO, de la FICHA o del DOSSIER de abajo. Si no está, dilo. Nunca te saques cifras de la manga.
+
+6) CALCULADORA SIEMPRE para aritmética. NUNCA calcules de cabeza (te equivocas). Mete la operación en un bloque calc de UNA línea (solo números y + - * / ( ) . ; sin texto, sin €, sin separador de miles: 55000 no 55.000; sin "="). Ejemplo:
 \`\`\`calc
 55000*120*0.032
 \`\`\`
-Y en el texto: "son unos 211.000 € que te juegas". Si necesitas varios cálculos, usa varios bloques calc de una línea cada uno.
+y en el texto explicas el resultado ("unos 211.000 €").
 
-2) GRÁFICAS — cuando el usuario pida un dibujo, gráfica, evolución o comparación visual, incluye un bloque JSON con datos REALES del ESTADO (serie_precio, serie_paises, historial, contribuciones). Formato EXACTO (una sola línea de JSON válido):
+== HORIZONTES: sé honesto con la precisión según cuánto tiempo vista ==
+- 1 semana: preciso (el modelo acierta a ~1 céntimo). Aquí puedes dar número firme.
+- 2-6 semanas: aproximado, el margen crece. Da número pero avisa del margen.
+- Meses / 1 año: NO es predicción precisa, es PLANIFICACIÓN. Da un recorrido con escenarios y bandas que se ABREN con el tiempo. Nunca un número clavado para dentro de 8 meses.
+- Explica, si viene al caso, que el modelo se AUTO-MEJORA cada semana: entra el precio real nuevo y afina la predicción siguiente (es rodante). Por eso preguntar "próximas semanas" sale mejor que "el año entero de golpe".
+
+== GRÁFICAS: SIEMPRE interactivas y visuales, sin que las pidan ==
+- Cuando la respuesta tenga que ver con evolución, recorrido, comparar o futuro, DIBUJA una gráfica (no solo texto). Son interactivas por defecto (el usuario puede pasar el dedo y ver valores).
+- Formato EXACTO, una sola línea de JSON válido:
 \`\`\`chart
-{"type":"line","title":"Precio España (último año)","labels":["s40/25","s41/25"],"series":[{"name":"España","data":[1.30,1.31]}]}
+{"type":"line","title":"...","labels":["s40/25","s41/25"],"series":[{"name":"España","data":[1.300,1.310]}]}
 \`\`\`
-- type: "line" (evolución) o "bar" (comparar pocas cosas).
-- Varias series para comparar países (usa serie_paises: espana/francia/alemania/dinamarca con sus etiquetas).
-- NUNCA inventes puntos: usa exactamente los números del ESTADO. Acompaña la gráfica con 1-2 frases de lectura.`;
+- type "line" (evolución) o "bar" (comparar pocas cosas). Varias series para comparar (serie_paises: espana/francia/alemania/dinamarca).
+- NUNCA inventes puntos: usa EXACTAMENTE los del ESTADO.
+- RECORRIDO A 1 AÑO (lo que más te pedirán, p.ej. "qué recorrido hará el precio semana a semana hasta dentro de un año"): usa EXCLUSIVAMENTE los datos de ESTADO.proyeccion_anual, con TRES series: {"name":"Escenario central","data":<central>}, {"name":"Banda alta","data":<banda_alta>}, {"name":"Banda baja","data":<banda_baja>}, y labels=<etiquetas>. Explica que es planificación estacional, no predicción semanal, y que la banda se abre porque a más distancia, más incertidumbre. Da la lectura por tramos (otoño/invierno/primavera) apoyándote en el DOSSIER (PPA, ciclo de cerdas, estacionalidad).
+
+`+FICHA_EMPRESA+`
+
+`+DOSSIER_MERCADO;
 function safeCalc(block){
   const lines=String(block||'').split('\n').map(l=>l.trim()).filter(Boolean);
   if(lines.length!==1)return null;                 // solo aceptamos una fórmula limpia de una línea
@@ -720,30 +776,50 @@ function safeCalc(block){
   try{const v=Function('"use strict";return('+e.replace(/%/g,'/100')+')')();return (typeof v==='number'&&isFinite(v))?{expr:shown,val:v}:null;}catch(_){return null;}
 }
 function fmtCalc(n){const a=Math.abs(n);const dec=a>=1000?0:(a>=1?2:3);return n.toLocaleString('es-ES',{minimumFractionDigits:0,maximumFractionDigits:dec});}
-function chatChart(spec){
+function chartGeom(spec){
   const type=(spec.type==='bar')?'bar':'line';
-  const title=String(spec.title||'');
   const labels=Array.isArray(spec.labels)?spec.labels.map(String):[];
-  let series=Array.isArray(spec.series)?spec.series.filter(s=>s&&Array.isArray(s.data)):[];
-  if(!series.length)return '<div class="cct">(sin datos para la gráfica)</div>';
-  const pal=['var(--accent)','#3b82f6','#e0a43b','#22a558','#a855f7'];
-  const W=460,H=210,mL=40,mR=14,mT=8,mB=22;
+  const series=Array.isArray(spec.series)?spec.series.filter(s=>s&&Array.isArray(s.data)):[];
   let all=[];series.forEach(s=>s.data.forEach(v=>{if(typeof v==='number'&&isFinite(v))all.push(v)}));
-  if(!all.length)return '<div class="cct">(sin datos numéricos)</div>';
-  let lo=Math.min(...all),hi=Math.max(...all);if(lo===hi){lo-=1;hi+=1;}const pad=(hi-lo)*0.12;lo-=pad;hi+=pad;
-  const N=Math.max(labels.length,...series.map(s=>s.data.length));
-  const X=i=>mL+(N<=1?0.5:(i/(N-1)))*(W-mL-mR),Y=v=>mT+(1-(v-lo)/(hi-lo))*(H-mT-mB);
-  let g='';for(let k=0;k<=3;k++){const v=lo+(hi-lo)*k/3,y=Y(v);g+='<line x1="'+mL+'" y1="'+y.toFixed(1)+'" x2="'+(W-mR)+'" y2="'+y.toFixed(1)+'" stroke="var(--line)"/><text x="'+(mL-5)+'" y="'+(y+3).toFixed(1)+'" text-anchor="end" font-size="9" fill="var(--muted)">'+(Math.abs(v)<10?v.toFixed(2):Math.round(v))+'</text>';}
-  const step=Math.max(1,Math.ceil(N/6));let xl='';for(let i=0;i<N;i++){if(i%step===0&&labels[i])xl+='<text x="'+X(i).toFixed(1)+'" y="'+(H-6)+'" text-anchor="middle" font-size="8.5" fill="var(--muted)">'+labels[i]+'</text>';}
+  let lo=all.length?Math.min(...all):0,hi=all.length?Math.max(...all):1;if(lo===hi){lo-=1;hi+=1;}
+  const pad=(hi-lo)*0.12;lo-=pad;hi+=pad;
+  const N=Math.max(labels.length,...series.map(s=>s.data.length),1);
+  const W=460,H=214,mL=42,mR=16,mT=10,mB=22;
+  return {type,labels,series,lo,hi,N,W,H,mL,mR,mT,mB,
+    X:i=>mL+(N<=1?0.5:(i/(N-1)))*(W-mL-mR),Y:v=>mT+(1-(v-lo)/(hi-lo))*(H-mT-mB)};
+}
+function ccFmt(v){return (Math.abs(v)<10)?fmt(v,3):Math.round(v).toLocaleString('es-ES');}
+function chatChart(spec){
+  const G=chartGeom(spec);if(!G.series.length)return '<div class="cct">(sin datos para la gráfica)</div>';
+  const {type,labels,series,lo,hi,N,W,H,mL,mR,mT,mB,X,Y}=G;
+  const pal=['var(--accent)','#5b8def','#e0b23b','#3fae6b','#a855f7'];const title=String(spec.title||'');
+  let g='';for(let k=0;k<=3;k++){const v=lo+(hi-lo)*k/3,y=Y(v);g+='<line x1="'+mL+'" y1="'+y.toFixed(1)+'" x2="'+(W-mR)+'" y2="'+y.toFixed(1)+'" stroke="var(--line)"/><text x="'+(mL-5)+'" y="'+(y+3).toFixed(1)+'" text-anchor="end" font-size="8.5" fill="var(--muted)">'+ccFmt(v)+'</text>';}
+  const step=Math.max(1,Math.ceil(N/6));let xl='';for(let i=0;i<N;i++){if(i%step===0&&labels[i])xl+='<text x="'+X(i).toFixed(1)+'" y="'+(H-6)+'" text-anchor="middle" font-size="8" fill="var(--muted)">'+labels[i]+'</text>';}
   let body='';
   if(type==='bar'){
     const s=series[0],bw=Math.min(38,(W-mL-mR)/Math.max(1,s.data.length)*0.6);
     s.data.forEach((v,i)=>{if(typeof v!=='number')return;const x=X(i),y=Y(v),y0=Y(Math.max(lo,0));body+='<rect x="'+(x-bw/2).toFixed(1)+'" y="'+Math.min(y,y0).toFixed(1)+'" width="'+bw.toFixed(1)+'" height="'+Math.abs(y0-y).toFixed(1)+'" rx="3" fill="'+pal[0]+'"/>';});
   }else{
-    series.forEach((s,si)=>{const c=s.color&&/^#|var\(/.test(s.color)?s.color:pal[si%pal.length];let p='',st=false;s.data.forEach((v,i)=>{if(typeof v!=='number'||!isFinite(v))return;p+=(st?'L':'M')+X(i).toFixed(1)+' '+Y(v).toFixed(1);st=true;});body+='<path d="'+p+'" fill="none" stroke="'+c+'" stroke-width="2" stroke-linejoin="round"/>';const li=s.data.map((v,i)=>[v,i]).filter(a=>typeof a[0]==='number');if(li.length){const last=li[li.length-1];body+='<circle cx="'+X(last[1]).toFixed(1)+'" cy="'+Y(last[0]).toFixed(1)+'" r="3" fill="'+c+'"/>';}});
+    series.forEach((s,si)=>{const c=s.color&&/^#|var\(/.test(s.color)?s.color:pal[si%pal.length];let p='',st=false;s.data.forEach((v,i)=>{if(typeof v!=='number'||!isFinite(v))return;p+=(st?'L':'M')+X(i).toFixed(1)+' '+Y(v).toFixed(1);st=true;});body+='<path d="'+p+'" fill="none" stroke="'+c+'" stroke-width="'+(si===0?2.4:1.5)+'" opacity="'+(si===0?1:.78)+'" stroke-linejoin="round"/>';const li=s.data.map((v,i)=>[v,i]).filter(a=>typeof a[0]==='number');if(li.length){const last=li[li.length-1];body+='<circle cx="'+X(last[1]).toFixed(1)+'" cy="'+Y(last[0]).toFixed(1)+'" r="3" fill="'+c+'"/>';}});
   }
-  let leg='';if(type==='line'&&series.length>1)leg='<div class="cleg">'+series.map((s,si)=>'<span><i style="background:'+(s.color||pal[si%pal.length])+'"></i>'+String(s.name||('S'+(si+1)))+'</span>').join('')+'</div>';
-  return (title?'<div class="cct">'+mdToHtml(title)+'</div>':'')+'<svg viewBox="0 0 '+W+' '+H+'">'+g+xl+body+'</svg>'+leg;
+  const leg=(series.length>1)?'<div class="cleg">'+series.map((s,si)=>'<span><i style="background:'+(s.color||pal[si%pal.length])+'"></i>'+String(s.name||('S'+(si+1)))+'</span>').join('')+'</div>':'';
+  const inter='<line class="cc-cr" x1="0" y1="'+mT+'" x2="0" y2="'+(H-mB)+'" stroke="var(--ink)" stroke-width="1" opacity="0"/><rect class="cc-cov" x="'+mL+'" y="'+mT+'" width="'+(W-mL-mR)+'" height="'+(H-mT-mB)+'" fill="transparent"/>';
+  return (title?'<div class="cct">'+mdToHtml(title)+'</div>':'')+'<svg viewBox="0 0 '+W+' '+H+'">'+g+xl+body+inter+'</svg>'+leg+'<div class="cc-tip"></div>';
+}
+function wireChatChart(box,spec){
+  try{
+    const G=chartGeom(spec);const cov=box.querySelector('.cc-cov'),cr=box.querySelector('.cc-cr'),tip=box.querySelector('.cc-tip');
+    if(!cov||!tip)return;const {labels,series,N,X}=G;
+    const move=ev=>{const r=cov.getBoundingClientRect();if(!r.width)return;const bx=box.getBoundingClientRect();const p=ev.touches?ev.touches[0]:ev;
+      let k=Math.round((p.clientX-r.left)/r.width*(N-1));k=Math.max(0,Math.min(N-1,k));
+      const x=X(k);cr.setAttribute('x1',x);cr.setAttribute('x2',x);cr.setAttribute('opacity',.35);
+      let html='<b>'+(labels[k]||('#'+(k+1)))+'</b>';
+      series.forEach((s,si)=>{const v=s.data[k];if(typeof v==='number'&&isFinite(v))html+='<br>'+(series.length>1?(String(s.name||('S'+(si+1)))+': '):'')+'<b>'+ccFmt(v)+'</b>';});
+      tip.innerHTML=html;tip.style.opacity=1;
+      tip.style.left=Math.max(4,(r.right-bx.left)-150)+'px';tip.style.top='2px';};   // fijo arriba-derecha, no baila
+    cov.addEventListener('mousemove',move);cov.addEventListener('mouseleave',()=>{cr.setAttribute('opacity',0);tip.style.opacity=0;});
+    cov.addEventListener('touchstart',move,{passive:true});cov.addEventListener('touchmove',e=>{e.preventDefault();move(e);},{passive:false});
+  }catch(e){}
 }
 function addBotRich(raw){
   const b=document.createElement('div');b.className='bub bot';
@@ -752,9 +828,9 @@ function addBotRich(raw){
     const before=raw.slice(last,m.index);
     if(before.trim()){const d=document.createElement('div');d.innerHTML=mdToHtml(before.trim());b.appendChild(d);}
     if(m[1].toLowerCase()==='chart'){
-      const box=document.createElement('div');box.className='chatchart';
-      try{box.innerHTML=chatChart(JSON.parse(m[2].trim()));}catch(e){box.innerHTML='<div class="cct">(no pude dibujar la gráfica)</div>';}
-      b.appendChild(box);
+      const box=document.createElement('div');box.className='chatchart';let spec=null;
+      try{spec=JSON.parse(m[2].trim());box.innerHTML=chatChart(spec);}catch(e){box.innerHTML='<div class="cct">(no pude dibujar la gráfica)</div>';}
+      b.appendChild(box);if(spec)wireChatChart(box,spec);
     }else{
       const r=safeCalc(m[2]);
       if(r){const c=document.createElement('div');c.className='chatcalc';c.innerHTML='🧮 <code>'+mdToHtml(r.expr.replace(/\*/g,'×').replace(/\//g,'÷'))+'</code> = <b>'+fmtCalc(r.val)+'</b>';b.appendChild(c);}
