@@ -761,7 +761,13 @@ y en el texto explicas el resultado ("unos 211.000 €").
 \`\`\`
 - type "line" (evolución) o "bar" (comparar pocas cosas). Varias series para comparar (serie_paises: espana/francia/alemania/dinamarca).
 - NUNCA inventes puntos: usa EXACTAMENTE los del ESTADO.
-- RECORRIDO A 1 AÑO (lo que más te pedirán, p.ej. "qué recorrido hará el precio semana a semana hasta dentro de un año"): usa EXCLUSIVAMENTE los datos de ESTADO.proyeccion_anual, con TRES series: {"name":"Escenario central","data":<central>}, {"name":"Banda alta","data":<banda_alta>}, {"name":"Banda baja","data":<banda_baja>}, y labels=<etiquetas>. Explica que es planificación estacional, no predicción semanal, y que la banda se abre porque a más distancia, más incertidumbre. Da la lectura por tramos (otoño/invierno/primavera) apoyándote en el DOSSIER (PPA, ciclo de cerdas, estacionalidad).
+- RECORRIDO A 1 AÑO por defecto (p.ej. "qué recorrido hará el precio semana a semana hasta dentro de un año"): usa EXCLUSIVAMENTE los datos de ESTADO.proyeccion_anual, con TRES series: {"name":"Escenario central","data":<central>}, {"name":"Banda alta","data":<banda_alta>}, {"name":"Banda baja","data":<banda_baja>}, y labels=<etiquetas>. Explica que es planificación estacional, no predicción semanal, y que la banda se abre porque a más distancia, más incertidumbre. Lectura por tramos (otoño/invierno/primavera) con el DOSSIER.
+
+- ESCENARIO PERSONALIZADO (CLAVE): si el usuario te da SU hipótesis de precio ("creo que a fin de año estará a 1€", "se hunde a 0,95 en enero y recupera en primavera"), NO inventes tú la curva (eso da resultados distintos cada vez). Emite un bloque \`escenario\` con las anclas que te diga y el SISTEMA construye la curva coherente (misma siempre) sobre el central del modelo. Formato EXACTO:
+\`\`\`escenario
+{"titulo":"Tu hipótesis (fin de año ~1€)","anclas":[{"sem":52,"anio":2026,"precio":1.000}]}
+\`\`\`
+sem = número de semana, anio = 2026 o 2027, precio a 3 decimales. Pon UN ancla por cada precio/fecha que mencione el usuario. El sistema dibuja "Central (modelo)" vs "tu escenario". Tú comentas la lectura y la diferencia en € (con la calculadora), pero los PUNTOS de la curva los pone el sistema, no tú.
 
 `+FICHA_EMPRESA+`
 
@@ -789,6 +795,37 @@ function chartGeom(spec){
     X:i=>mL+(N<=1?0.5:(i/(N-1)))*(W-mL-mR),Y:v=>mT+(1-(v-lo)/(hi-lo))*(H-mT-mB)};
 }
 function ccFmt(v){return (Math.abs(v)<10)?fmt(v,3):Math.round(v).toLocaleString('es-ES');}
+/* Constructor DETERMINISTA de escenarios: mismas anclas = misma curva siempre (no la inventa el bot) */
+function buildScenario(anclas){
+  try{
+    if(typeof D==='undefined'||!D)return null;
+    const pa=buildEstado().proyeccion_anual;if(!pa)return null;
+    const et=pa.etiquetas,central=pa.central,lastv=D.ultimo.v;
+    const pts=[{i:0,v:lastv}];
+    (anclas||[]).forEach(a=>{
+      if(typeof a.precio!=='number')return;
+      let idx=et.indexOf('s'+a.sem+'/'+String(a.anio).slice(-2));
+      if(idx<0)idx=et.findIndex(x=>x.startsWith('s'+a.sem+'/'));
+      if(idx>=0)pts.push({i:idx+1,v:a.precio});
+    });
+    if(pts.length<2)return null;
+    pts.sort((x,y)=>x.i-y.i);
+    const lastA=pts[pts.length-1],scen=[];
+    for(let k=0;k<et.length;k++){
+      const h=k+1;
+      if(h<=lastA.i){
+        let a=pts[0],b=pts[pts.length-1];
+        for(let j=0;j<pts.length;j++){if(pts[j].i<=h)a=pts[j];if(pts[j].i>=h){b=pts[j];break;}}
+        const span=(b.i-a.i)||1,t=(h-a.i)/span;
+        scen.push(Math.round((a.v+(b.v-a.v)*t)*1000)/1000);
+      }else{
+        const base=central[Math.max(0,lastA.i-1)]||lastv;
+        scen.push(Math.round((lastA.v*(central[k]/base))*1000)/1000);
+      }
+    }
+    return {etiquetas:et,central:central,escenario:scen};
+  }catch(e){return null;}
+}
 function chatChart(spec){
   const G=chartGeom(spec);if(!G.series.length)return '<div class="cct">(sin datos para la gráfica)</div>';
   const {type,labels,series,lo,hi,N,W,H,mL,mR,mT,mB,X,Y}=G;
@@ -823,13 +860,20 @@ function wireChatChart(box,spec){
 }
 function addBotRich(raw){
   const b=document.createElement('div');b.className='bub bot';
-  const re=/```(chart|calc)\s*([\s\S]*?)```/gi;let last=0,m;
+  const re=/```(chart|calc|escenario)\s*([\s\S]*?)```/gi;let last=0,m;
   while((m=re.exec(raw))){
     const before=raw.slice(last,m.index);
     if(before.trim()){const d=document.createElement('div');d.innerHTML=mdToHtml(before.trim());b.appendChild(d);}
     if(m[1].toLowerCase()==='chart'){
       const box=document.createElement('div');box.className='chatchart';let spec=null;
       try{spec=JSON.parse(m[2].trim());box.innerHTML=chatChart(spec);}catch(e){box.innerHTML='<div class="cct">(no pude dibujar la gráfica)</div>';}
+      b.appendChild(box);if(spec)wireChatChart(box,spec);
+    }else if(m[1].toLowerCase()==='escenario'){
+      const box=document.createElement('div');box.className='chatchart';let spec=null;
+      try{const cfg=JSON.parse(m[2].trim());const s=buildScenario(cfg.anclas);
+        if(s){spec={type:'line',title:cfg.titulo||'Tu escenario vs modelo',labels:s.etiquetas,series:[{name:'Central (modelo)',data:s.central},{name:(cfg.titulo||'Tu escenario'),data:s.escenario,color:'#e0b23b'}]};box.innerHTML=chatChart(spec);}
+        else box.innerHTML='<div class="cct">(no pude construir el escenario — dame un precio y una semana concretos)</div>';
+      }catch(e){box.innerHTML='<div class="cct">(escenario no válido)</div>';}
       b.appendChild(box);if(spec)wireChatChart(box,spec);
     }else{
       const r=safeCalc(m[2]);
@@ -842,7 +886,7 @@ function addBotRich(raw){
   if(!b.childNodes.length)b.innerHTML=mdToHtml(raw);
   $('cbody').appendChild(b);$('cbody').scrollTop=$('cbody').scrollHeight;return b;
 }
-function cleanForLog(raw){return String(raw).replace(/```chart[\s\S]*?```/gi,'[gráfica mostrada]').replace(/```calc\s*([\s\S]*?)```/gi,(_,e)=>{const r=safeCalc(e);return r?(r.expr+' = '+fmtCalc(r.val)):e.trim();}).replace(/\s+/g,' ').trim();}
+function cleanForLog(raw){return String(raw).replace(/```chart[\s\S]*?```/gi,'[gráfica mostrada]').replace(/```escenario[\s\S]*?```/gi,'[escenario mostrado]').replace(/```calc\s*([\s\S]*?)```/gi,(_,e)=>{const r=safeCalc(e);return r?(r.expr+' = '+fmtCalc(r.val)):e.trim();}).replace(/\s+/g,' ').trim();}
 let CHATLOG=[];                              // hilo en texto plano {role,content}
 let sending=false;
 function pushLog(role,content){CHATLOG.push({role,content});if(CHATLOG.length>12)CHATLOG=CHATLOG.slice(-12);}
