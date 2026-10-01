@@ -54,7 +54,10 @@ export default {
     const esTema = TEMAS.some(t => txt.includes(t));
     const esSaludo = /^(hola|buenas|hey|ey|hi|holi|qué tal|que tal|buenos|buenass|saludos)/.test(txt) || txt.length < 5;
     const esFollow = FOLLOW.some(t => txt.includes(t));
-    const permitir = enConversacion || esTema || esSaludo || esFollow;
+    // Portero PERMISIVO: deja pasar casi todo (la IA ya tiene la correa para reconducir). Solo bloquea spam claramente ajeno.
+    const OFFTOPIC = ['receta','cocina','futbol','fútbol','baloncesto','madrid','barça','barca','pelicula','película','serie de tv','chiste','poema','novia','novio','ligar','codigo','código','programa','python','javascript','java ','examen','deberes','medicina','medicamento','sintoma','síntoma','viaje','hotel','vuelo','cancion','canción','horoscopo','horóscopo','bitcoin','criptomoneda'];
+    const esOff = OFFTOPIC.some(t => txt.includes(t));
+    const permitir = enConversacion || esTema || esSaludo || esFollow || !esOff;
     if (!permitir) {
       await registrar(env, usuario, pregunta, '[rechazada: off-topic]');
       return json({ respuesta: 'Puedo ayudarte con todo lo del mercado del cerdo y las predicciones de la Lonja de Lleida 🐷 — precios, el porqué, tendencia, Francia/Alemania, cuándo vender, escenarios, impacto en €, gráficas… Pregúntame por ahí y te lo clavo.' }, 200, cors);
