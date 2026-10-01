@@ -895,6 +895,32 @@ function addBotRich(raw){
   $('cbody').appendChild(b);$('cbody').scrollTop=$('cbody').scrollHeight;return b;
 }
 function cleanForLog(raw){return String(raw).replace(/```chart[\s\S]*?```/gi,'[gráfica mostrada]').replace(/```escenario[\s\S]*?```/gi,'[escenario mostrado]').replace(/```calc\s*([\s\S]*?)```/gi,(_,e)=>{const r=safeCalc(e);return r?(r.expr+' = '+fmtCalc(r.val)):e.trim();}).replace(/\s+/g,' ').trim();}
+/* Pinta un bloque especial (gráfica/escenario/cálculo) ya montado */
+function pintaBloque(b,kind,content){
+  if(kind==='chart'){const box=document.createElement('div');box.className='chatchart';let spec=null;try{spec=JSON.parse(content.trim());box.innerHTML=chatChart(spec);}catch(e){box.innerHTML='<div class="cct">(no pude dibujar la gráfica)</div>';}b.appendChild(box);if(spec)wireChatChart(box,spec);}
+  else if(kind==='escenario'){const box=document.createElement('div');box.className='chatchart';let spec=null;try{const cfg=JSON.parse(content.trim());const s=buildScenario(cfg.anclas);if(s){spec={type:'line',title:cfg.titulo||'Tu escenario vs modelo',labels:s.etiquetas,series:[{name:'Central (modelo)',data:s.central},{name:(cfg.titulo||'Tu escenario'),data:s.escenario,color:'#e0b23b'}]};box.innerHTML=chatChart(spec);}else box.innerHTML='<div class="cct">(no pude construir el escenario)</div>';}catch(e){box.innerHTML='<div class="cct">(escenario no válido)</div>';}b.appendChild(box);if(spec)wireChatChart(box,spec);}
+  else{const r=safeCalc(content);const c=document.createElement('div');c.className='chatcalc';if(r)c.innerHTML='🧮 <code>'+mdToHtml(r.expr.replace(/\*/g,'×').replace(/\//g,'÷'))+'</code> = <b>'+fmtCalc(r.val)+'</b>';else c.innerHTML=mdToHtml(content.trim());b.appendChild(c);}
+}
+/* Máquina de escribir: revela la respuesta poco a poco (rápido), las gráficas aparecen montadas */
+async function typeBotRich(raw){
+  const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+  const b=document.createElement('div');b.className='bub bot';$('cbody').appendChild(b);
+  const scroll=()=>{$('cbody').scrollTop=$('cbody').scrollHeight;};
+  const re=/```(chart|calc|escenario)\s*([\s\S]*?)```/gi;const segs=[];let last=0,m;
+  while((m=re.exec(raw))){if(m.index>last)segs.push({t:'text',v:raw.slice(last,m.index)});segs.push({t:m[1].toLowerCase(),v:m[2]});last=re.lastIndex;}
+  if(last<raw.length)segs.push({t:'text',v:raw.slice(last)});
+  if(!segs.length)segs.push({t:'text',v:raw});
+  for(const s of segs){
+    if(s.t==='text'){
+      const txt=s.v;if(!txt.trim())continue;
+      const d=document.createElement('div');b.appendChild(d);
+      const step=Math.max(2,Math.ceil(txt.length/140));   // adaptativo: largo = chunks mayores (siempre ~1,5-2s)
+      for(let i=step;i<txt.length;i+=step){d.innerHTML=mdToHtml(txt.slice(0,i));scroll();await sleep(14);}
+      d.innerHTML=mdToHtml(txt.trim());scroll();
+    }else{pintaBloque(b,s.t,s.v);scroll();await sleep(120);}
+  }
+  scroll();return b;
+}
 let CHATLOG=[];                              // hilo en texto plano {role,content}
 let sending=false;
 function pushLog(role,content){CHATLOG.push({role,content});if(CHATLOG.length>12)CHATLOG=CHATLOG.slice(-12);}
@@ -919,7 +945,7 @@ async function ask(text){
       const data=await resp.json();
       if(data&&data.respuesta)ansText=data.respuesta;
     }catch(e){}
-    if(ansText){setChatStatus('● IA Claude · datos de hoy');t.remove();addBotRich(ansText);pushLog('assistant',cleanForLog(ansText));}
+    if(ansText){setChatStatus('● IA Claude · datos de hoy');t.remove();await typeBotRich(ansText);pushLog('assistant',cleanForLog(ansText));}
     else{let fb;try{fb=await route(text);}catch(e){fb='Uf, ahora mismo no puedo conectar con la IA 🤔. Prueba otra vez en un momento.';}t.remove();addBub(fb,'bot');pushLog('assistant',stripTags(fb));}
   }finally{sending=false;$('csend').disabled=false;}
 }
