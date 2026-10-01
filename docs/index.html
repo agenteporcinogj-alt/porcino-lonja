@@ -128,6 +128,8 @@ td:first-child,th:first-child{text-align:left}
 .chat-head{display:flex;align-items:center;gap:10px;padding:13px 16px;border-bottom:1px solid var(--line);background:var(--surface2)}
 .chat-head .av{width:34px;height:34px;border-radius:50%;background:linear-gradient(135deg,var(--accent),#8a3d34);display:flex;align-items:center;justify-content:center;font-size:1.1rem}
 .chat-head .nm{font-weight:600;font-size:.95rem}.chat-head .st{font-size:.72rem;color:var(--good)}
+.chat-head #whoami{width:92px;padding:6px 9px;border:1px solid var(--line);border-radius:14px;background:var(--surface);color:var(--ink);font-size:.78rem;font-family:inherit}
+.chat-head #whoami:focus{outline:2px solid var(--accent)}
 .chat-body{padding:14px;display:flex;flex-direction:column;gap:10px;max-height:420px;overflow-y:auto}
 .bub{max-width:85%;padding:10px 13px;border-radius:14px;font-size:.9rem;line-height:1.45;animation:pop .25s ease both}
 .bub.bot{align-self:flex-start;background:var(--surface2);border:1px solid var(--line);border-bottom-left-radius:4px}
@@ -250,7 +252,7 @@ footer a{color:var(--accent);cursor:pointer}
     <h2>Pregúntale al modelo</h2>
     <p class="slab">Habla con el asistente como con una IA. Responde con los datos reales, sin inventarse nada.</p>
     <div class="chat">
-      <div class="chat-head"><div class="av">🐷</div><div><div class="nm">Asistente Porcino</div><div class="st">● en línea · datos de hoy</div></div></div>
+      <div class="chat-head"><div class="av">🐷</div><div style="flex:1"><div class="nm">Asistente Porcino</div><div class="st">● en línea · datos de hoy</div></div><input id="whoami" placeholder="tu nombre" autocomplete="off" title="Para saber quién pregunta (opcional)"></div>
       <div class="chat-body" id="cbody"></div>
       <div class="chips" id="chips"></div>
       <div class="chat-input">
@@ -656,6 +658,7 @@ async function routeScored(q){
 }
 const CHIPS=['¿Qué precio esperas?','¿Por qué?','¿Vendo o aguanto?','📈 Dibuja el precio del último año','📊 Compara España vs Francia','🧮 ¿Cuánto me juego esta semana?','¿Es fiable?','¿Y si hay PPA o China?'];
 function initChat(){
+  initWhoami();
   $('chips').innerHTML=CHIPS.map(c=>'<button class="chip">'+c+'</button>').join('');
   $('chips').querySelectorAll('.chip').forEach(b=>b.onclick=()=>ask(b.textContent));
   $('csend').onclick=()=>{if($('cin').value.trim())ask($('cin').value.trim());};
@@ -669,8 +672,9 @@ function showTyping(){const t=document.createElement('div');t.className='typing'
 /* ===== Puente al cerebro Claude (Cloudflare Worker) ===== */
 const WORKER='https://porcino-chat.agenteporcinogj.workers.dev/';
 const QUICK={saludo:1,gracias:1};            // estas se responden en local (gratis, instantáneo)
-function chatUser(){try{return localStorage.getItem('cu_name')||'anónimo';}catch(e){return 'anónimo';}}
+function chatUser(){try{const n=(localStorage.getItem('cu_name')||'').trim();if(n)return n.slice(0,40);let id=localStorage.getItem('cu_id');if(!id){id='visitante-'+Math.random().toString(36).slice(2,6);localStorage.setItem('cu_id',id);}return id;}catch(e){return 'visitante';}}
 function setChatName(n){try{localStorage.setItem('cu_name',n);}catch(e){}}
+function initWhoami(){try{const el=$('whoami');if(!el)return;el.value=(localStorage.getItem('cu_name')||'');el.addEventListener('input',()=>setChatName(el.value.trim()));}catch(e){}}
 let NEEDNAME=false;
 function mdToHtml(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\*\*([^*]+)\*\*/g,'<b>$1</b>').replace(/\n/g,'<br>');}
 function buildEstado(){

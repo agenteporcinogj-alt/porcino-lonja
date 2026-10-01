@@ -1,15 +1,20 @@
-// ── Cerebro del chat IA de Grupo Jorge (Cloudflare Worker) · v5 ──
-// Secreto en Cloudflare: ANTHROPIC_API_KEY.
-// El modelo se elige desde la web (body.modelo) → puedo cambiarlo sin volver a tocar este worker.
+// ── Cerebro del chat IA de Grupo Jorge (Cloudflare Worker) · v6 (Sonnet + registro) ──
+// Secretos: ANTHROPIC_API_KEY, ADMIN_KEY. Binding KV: LOG (registro de preguntas).
+// POST → chat + guarda pregunta y respuesta.  GET ?ver=1&key=ADMIN_KEY → página con el historial.
 
 export default {
   async fetch(request, env) {
     const cors = {
       'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Methods': 'POST, OPTIONS',
+      'Access-Control-Allow-Methods': 'POST, GET, OPTIONS',
       'Access-Control-Allow-Headers': 'Content-Type',
     };
     if (request.method === 'OPTIONS') return new Response(null, { headers: cors });
+    if (request.method === 'GET') {
+      const url = new URL(request.url);
+      if (url.searchParams.has('ver')) return verLog(url, env, cors);
+      return new Response('OK', { headers: cors });
+    }
     if (request.method !== 'POST') return json({ error: 'POST only' }, 405, cors);
 
     let body;
@@ -17,6 +22,7 @@ export default {
 
     const estado = body.estado || {};
     const extra = String(body.extra || '').slice(0, 4000);
+    const usuario = String(body.usuario || 'visitante').slice(0, 40);
     const MODELOS = { haiku: 'claude-haiku-4-5-20251001', sonnet: 'claude-sonnet-5', opus: 'claude-opus-5-5' };
     const modelo = MODELOS[String(body.modelo || '').toLowerCase()] || 'claude-sonnet-5';
 
@@ -49,8 +55,10 @@ export default {
     const esSaludo = /^(hola|buenas|hey|ey|hi|holi|qué tal|que tal|buenos|buenass|saludos)/.test(txt) || txt.length < 5;
     const esFollow = FOLLOW.some(t => txt.includes(t));
     const permitir = enConversacion || esTema || esSaludo || esFollow;
-    if (!permitir)
+    if (!permitir) {
+      await registrar(env, usuario, pregunta, '[rechazada: off-topic]');
       return json({ respuesta: 'Puedo ayudarte con todo lo del mercado del cerdo y las predicciones de la Lonja de Lleida 🐷 — precios, el porqué, tendencia, Francia/Alemania, cuándo vender, escenarios, impacto en €, gráficas… Pregúntame por ahí y te lo clavo.' }, 200, cors);
+    }
 
     const CORE = `Eres el analista de mercado porcino de Grupo Jorge (empresa que sacrifica ~55.000 cerdos/semana de 120 kg). Hablas claro, cercano y con criterio, como un analista veterano que se moja y ayuda a decidir. Razona a fondo antes de responder: relaciona las señales del ESTADO entre sí (vecinos, estacionalidad, inercia, escenarios, demanda) y explica el porqué con lógica, no sueltes titulares.
 
@@ -80,10 +88,44 @@ Responde en español. Ajusta la longitud a la pregunta: breve si es simple, y si
       respuesta = 'No he podido conectar ahora mismo, prueba otra vez en un momento.';
     }
 
+    await registrar(env, usuario, pregunta, respuesta);
     return json({ respuesta }, 200, cors);
   },
 };
 
-function json(obj, status, cors) {
-  return new Response(JSON.stringify(obj), { status, headers: { ...cors, 'content-type': 'application/json' } });
+// Guarda la pregunta y respuesta en el KV (todo en metadata para listarlo de una).
+async function registrar(env, usuario, pregunta, respuesta) {
+  try {
+    if (!env.LOG) return;
+    const limpia = String(respuesta).replace(/```[\s\S]*?```/g, '[gráfica/cálculo]').replace(/\s+/g, ' ').trim();
+    const key = `q:${Date.now()}:${Math.random().toString(36).slice(2, 7)}`;
+    await env.LOG.put(key, 'x', {
+      metadata: { t: new Date().toISOString(), usuario, pregunta: String(pregunta).slice(0, 220), respuesta: limpia.slice(0, 560) },
+      expirationTtl: 60 * 60 * 24 * 365,
+    });
+  } catch (_) {}
 }
+
+// Página para ver el historial (protegida con ADMIN_KEY).
+async function verLog(url, env, cors) {
+  const key = url.searchParams.get('key') || '';
+  if (!env.ADMIN_KEY || key !== env.ADMIN_KEY)
+    return new Response('No autorizado. Usa ?ver=1&key=TU_ADMIN_KEY', { status: 401, headers: cors });
+  if (!env.LOG) return htmlResp('<h1>🐷 Registro</h1><p>Falta el KV (LOG).</p>', cors);
+  const list = await env.LOG.list({ limit: 1000 });
+  const rows = list.keys.map(k => k.metadata || {}).filter(m => m.t).sort((a, b) => (a.t < b.t ? 1 : -1));
+  let h = '<h1>🐷 Historial del chatbot · ' + rows.length + ' preguntas</h1>';
+  h += '<table><tr><th>Cuándo</th><th>Quién</th><th>Pregunta</th><th>Respuesta</th></tr>';
+  for (const m of rows) {
+    const f = new Date(m.t); const cuando = isNaN(f) ? esc(m.t) : f.toLocaleString('es-ES');
+    h += '<tr><td class=t>' + esc(cuando) + '</td><td class=u>' + esc(m.usuario || '?') + '</td><td>' + esc(m.pregunta || '') + '</td><td class=r>' + esc(m.respuesta || '') + '</td></tr>';
+  }
+  h += '</table>';
+  return htmlResp(h, cors);
+}
+function htmlResp(inner, cors) {
+  const css = 'body{font-family:system-ui,Arial;background:#141414;color:#eee;margin:0;padding:16px}h1{font-size:1.1rem}table{border-collapse:collapse;width:100%;font-size:.86rem}td,th{border-bottom:1px solid #333;padding:8px;text-align:left;vertical-align:top}th{color:#e0a35b}.u{color:#5b8def;font-weight:600;white-space:nowrap}.t{color:#888;white-space:nowrap;font-size:.76rem}.r{color:#bbb;max-width:420px}';
+  return new Response('<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Historial · Grupo Jorge</title><style>' + css + '</style>' + inner, { status: 200, headers: { ...cors, 'content-type': 'text/html; charset=utf-8' } });
+}
+function esc(s) { return String(s).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c])); }
+function json(obj, status, cors) { return new Response(JSON.stringify(obj), { status, headers: { ...cors, 'content-type': 'application/json' } }); }
