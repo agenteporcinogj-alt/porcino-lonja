@@ -108,7 +108,13 @@ async function registrar(env, usuario, pregunta, respuesta) {
 }
 
 // Mapa de alias: cuando identifiques quién es un visitante, lo añades aquí.
-const ALIAS = { 'visitante-nw3b': 'Artur (yo)', 'visitante-2r53': 'Artur (otro navegador)' };
+const ALIAS = {
+  'visitante-nw3b': 'Artur (yo)',
+  'stress': 'Claude 🤖 (testing)',
+  'visitante': 'Claude 🤖 (testing)',
+  'visitante-2r53': 'Claude 🤖 (testing)',
+  'claude-test': 'Claude 🤖 (testing)',
+};
 function quien(u) { return ALIAS[u] || u || '?'; }
 function mdLog(s) { return esc(String(s)).replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>').replace(/^#{1,6}\s*/gm, '').replace(/\n/g, '<br>'); }
 
