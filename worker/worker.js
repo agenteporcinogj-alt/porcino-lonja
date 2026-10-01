@@ -98,14 +98,19 @@ Responde en español. Ajusta la longitud a la pregunta: breve si es simple, y si
 async function registrar(env, usuario, pregunta, respuesta) {
   try {
     if (!env.LOG) return;
-    const limpia = String(respuesta).replace(/```[\s\S]*?```/g, '[gráfica/cálculo]').replace(/\s+/g, ' ').trim();
+    const limpia = String(respuesta).replace(/```[\s\S]*?```/g, '[gráfica]').trim();
     const key = `q:${Date.now()}:${Math.random().toString(36).slice(2, 7)}`;
-    await env.LOG.put(key, 'x', {
-      metadata: { t: new Date().toISOString(), usuario, pregunta: String(pregunta).slice(0, 220), respuesta: limpia.slice(0, 560) },
+    await env.LOG.put(key, limpia.slice(0, 8000), {   // respuesta COMPLETA en el valor
+      metadata: { t: new Date().toISOString(), usuario, pregunta: String(pregunta).slice(0, 300) },
       expirationTtl: 60 * 60 * 24 * 365,
     });
   } catch (_) {}
 }
+
+// Mapa de alias: cuando identifiques quién es un visitante, lo añades aquí.
+const ALIAS = { 'visitante-nw3b': 'Artur (yo)', 'visitante-2r53': 'Artur (otro navegador)' };
+function quien(u) { return ALIAS[u] || u || '?'; }
+function mdLog(s) { return esc(String(s)).replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>').replace(/^#{1,6}\s*/gm, '').replace(/\n/g, '<br>'); }
 
 // Página para ver el historial (protegida con ADMIN_KEY).
 async function verLog(url, env, cors) {
@@ -114,13 +119,17 @@ async function verLog(url, env, cors) {
     return new Response('No autorizado. Usa ?ver=1&key=TU_ADMIN_KEY', { status: 401, headers: cors });
   if (!env.LOG) return htmlResp('<h1>🐷 Registro</h1><p>Falta el KV (LOG).</p>', cors);
   const list = await env.LOG.list({ limit: 1000 });
-  const rows = list.keys.map(k => k.metadata || {}).filter(m => m.t).sort((a, b) => (a.t < b.t ? 1 : -1));
-  let h = '<h1>🐷 Historial del chatbot · ' + rows.length + ' preguntas</h1>';
-  h += '<table><tr><th>Cuándo</th><th>Quién</th><th>Pregunta</th><th>Respuesta</th></tr>';
-  for (const m of rows) {
-    const f = new Date(m.t); const cuando = isNaN(f) ? esc(m.t) : f.toLocaleString('es-ES');
-    h += '<tr><td class=t>' + esc(cuando) + '</td><td class=u>' + esc(m.usuario || '?') + '</td><td>' + esc(m.pregunta || '') + '</td><td class=r>' + esc(m.respuesta || '') + '</td></tr>';
-  }
+  const keys = list.keys.filter(k => k.metadata && k.metadata.t).sort((a, b) => (a.metadata.t < b.metadata.t ? 1 : -1));
+  const recientes = keys.slice(0, 60);
+  const answers = await Promise.all(recientes.map(k => env.LOG.get(k.name).catch(() => '')));
+  let h = '<h1>🐷 Historial del chatbot · ' + keys.length + ' preguntas (últimas ' + recientes.length + ')</h1>';
+  h += '<table><tr><th>Cuándo (Madrid)</th><th>Quién</th><th>Pregunta</th><th>Respuesta</th></tr>';
+  recientes.forEach((k, i) => {
+    const m = k.metadata; const f = new Date(m.t);
+    const cuando = isNaN(f) ? esc(m.t) : f.toLocaleString('es-ES', { timeZone: 'Europe/Madrid' });
+    const resp = answers[i] || m.respuesta || '';
+    h += '<tr><td class=t>' + esc(cuando) + '</td><td class=u>' + esc(quien(m.usuario)) + '</td><td>' + esc(m.pregunta || '') + '</td><td class=r>' + mdLog(resp) + '</td></tr>';
+  });
   h += '</table>';
   return htmlResp(h, cors);
 }
