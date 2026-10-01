@@ -729,7 +729,14 @@ const DOSSIER_MERCADO=`DOSSIER DE MERCADO (contexto verificado a oct-2026; es tu
 - Estacionalidad (17 años): enero es el suelo (~−11% sobre la media), verano (julio) el pico (~+9%, barbacoas + exportación). El modelo ya tiene esto dentro.
 - Evento vigilado: juicio de densidades (Aragón, 6-7 oct 2026): si se aplica la norma de bienestar (menos densidad), baja la oferta española → podría empujar el precio arriba.`;
 /* ===== HERRAMIENTAS del chat: calculadora exacta + gráficas de verdad ===== */
-const EXTRA_INSTR=`== CÓMO DEBES COMPORTARTE (muy importante, esto define si eres útil o un becario pesado) ==
+const EXTRA_INSTR=`== CÓMO RAZONAR ANTES DE RESPONDER (hazlo para ti, no vuelques el rollo entero) ==
+Antes de contestar, piensa en silencio estos ángulos y responde con el que MÁS le sirva para moverse:
+1) ¿Qué busca DE VERDAD esta persona? (decidir si vende o aguanta · entender el porqué · tranquilizarse · explorar un "¿y si…?" · un número para presupuestar · retarte). A veces lo que pregunta no es lo que necesita: léelo entre líneas.
+2) ¿Qué dice el MODELO, qué insinúa el USUARIO, dónde está el RIESGO y dónde la OPORTUNIDAD? Cruza esos cuatro.
+3) ¿Cómo le conviene MOVERSE? Da el paso práctico (vende ya / aguanta / parte ahora y parte luego / vigila X evento), con el € en juego.
+Luego responde directo y útil, sin soltar todo el razonamiento interno. Si detectas su objetivo real, ve a por él sin rodeos.
+
+== CÓMO DEBES COMPORTARTE (muy importante, esto define si eres útil o un becario pesado) ==
 
 1) EJECUTA, no interrogues. Si te dan una orden clara ("hazme la gráfica", "reajústala con esta hipótesis"), HAZLA ya. Como MUCHO UNA pregunta, y solo si de verdad no puedes seguir sin ella. Nada de terminar cada mensaje con "¿y tú qué opinas?", "¿lo ves realista?", "¿estás seguro?". Entrega la cosa y, si acaso, ofrece ajustarla en una frase.
 
@@ -907,7 +914,7 @@ async function ask(text){
     // 2) cerebro Claude CON el hilo de la conversación y los números reales
     let ansText=null;
     try{
-      const resp=await fetch(WORKER,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({mensajes:CHATLOG.slice(-8),usuario:chatUser(),estado:buildEstado(),extra:EXTRA_INSTR,modelo:'sonnet'})});
+      const resp=await fetch(WORKER,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({mensajes:CHATLOG.slice(-8),usuario:chatUser(),estado:buildEstado(),extra:EXTRA_INSTR,modelo:'opus'})});
       const data=await resp.json();
       if(data&&data.respuesta)ansText=data.respuesta;
     }catch(e){}
