@@ -14,6 +14,7 @@ PDFS=os.path.join(HERE,'_pdfs')
 MASTER=os.path.join(HERE,'data','master.xlsx')
 LOG=os.path.join(HERE,'data','validacion_modelo.csv')
 VISTOS=os.path.join(HERE,'data','correos_vistos.txt')  # Message-IDs ya procesados (persiste en el repo -> no re-descargar correos = no OVERQUOTA)
+CTX_FILE=os.path.join(HERE,'data','contexto_mercado.json')  # contexto rico persistido (Europa/PPA/lechon) para el bot
 ENC_OUT=os.path.join(HERE,'docs','data.enc.js')
 NUM=re.compile(r'-?\d+,\d+')
 def tf(s): return float(s.replace('.','').replace(',','.'))
@@ -127,6 +128,68 @@ def cebado_de_de(path):
             ns=NUM.findall(l)
             if ns: return tf(ns[0])
     return None
+
+# ---------- CONTEXTO DE MERCADO (señales ricas que antes se tiraban: Europa, PPA, lechón) ----------
+import unicodedata
+def _latest_pdf(pat):
+    fs=sorted(glob.glob(os.path.join(PDFS,pat)))
+    return fs[-1] if fs else None
+def _pdftxt(path):
+    if not path: return ''
+    try:
+        with pdfplumber.open(path) as pdf: return '\n'.join((p.extract_text() or '') for p in pdf.pages)
+    except Exception: return ''
+def ctx_europa(t):
+    # Precios de porcino de TODA Europa (del PDF "Mercados Europeos"), no solo Francia/Alemania/Dinamarca.
+    out={}
+    pats={'italia':r'CUN.*?(\d,\d{3})','paises_bajos':r'Vion.*?(\d,\d{2})','belgica':r'B[eé]lgica.*?Vivo\s+(\d,\d+)',
+          'portugal':r'Montijo.*?(\d,\d{3})','reino_unido':r'SPP.*?(\d,\d{2})','polonia':r'Polonia.*?Vivo\s+(\d,\d+)'}
+    for k,pat in pats.items():
+        m=re.search(pat,t,re.I|re.S)
+        if m:
+            try: out[k]=tf(m.group(1))
+            except Exception: pass
+    return out or None
+def ctx_ppa(t):
+    if not t: return None
+    norm=re.sub(r'\s+',' ',re.sub(r'\b\d[\d.]*\b',' ',t)).lower()
+    nn=''.join(c for c in unicodedata.normalize('NFD',norm) if unicodedata.category(c)!='Mn')
+    dom='sin positivos en porcino domestico' in nn
+    com='sin cambios en el comercio exterior' in nn
+    return {'sin_positivos_domestico':dom,'sin_cambios_comercio_exterior':com,
+            'resumen':('Solo focos en jabalíes, sin positivos en cerdo doméstico y SIN cambios en exportación (China/Japón no vetan por esto de momento)'
+                       if (dom and com) else 'Situación PPA con posibles cambios — revisar, podría afectar a bloqueos de exportación')}
+def ctx_lechon(t):
+    m=re.search(r'Precio Base 20 ?kg\s+[\d,]+\s+([\d,]+)',t)
+    try: return tf(m.group(1)) if m else None
+    except Exception: return None
+def paso_contexto():
+    # Extrae señales ricas de los PDF que haya en disco (los NUEVOS de este run) y las PERSISTE en JSON,
+    # fusionando con lo anterior. Así el contexto sobrevive aunque un PDF viejo no se vuelva a descargar.
+    ctx={}
+    if os.path.exists(CTX_FILE):
+        try: ctx=json.load(open(CTX_FILE))
+        except Exception: ctx={}
+    hoy=datetime.date.today().isoformat()
+    try:
+        pe=_latest_pdf('PE*.pdf')
+        if pe:
+            eu=ctx_europa(_pdftxt(pe))
+            if eu: ctx['europa']={'datos':eu,'fecha':hoy}
+        ppaf=_latest_pdf('*PPA*.pdf')
+        if ppaf:
+            pp=ctx_ppa(_pdftxt(ppaf))
+            if pp: ctx['ppa']={**pp,'fecha':hoy}
+        lef=_latest_pdf('LE*.pdf')
+        if lef:
+            le=ctx_lechon(_pdftxt(lef))
+            if le is not None: ctx['lechon_nacional_20kg']={'valor':le,'fecha':hoy}
+        try: json.dump(ctx,open(CTX_FILE,'w'),ensure_ascii=False)
+        except Exception as e: print('  (no se pudo guardar contexto:',e,')')
+        print(f'  Contexto mercado persistido: {list(ctx.keys())}')
+    except Exception as e:
+        print('  (contexto no disponible:',e,')')
+    return ctx
 
 # ---------- 2) ACTUALIZAR MAESTRO ----------
 def paso_maestro():
@@ -267,7 +330,7 @@ def es_backtest(r):
         return fp>=mon
     except Exception:
         return False
-def paso_web(m,historial,diario=None):
+def paso_web(m,historial,diario=None,contexto=None):
     delta=m['delta_cts']; base=m['pred']
     c1=lambda x:('%.1f'%x).replace('.',',')
     if delta>=1.0: sem={'estado':'AGUANTA','color':'verde','txt':'El precio va a SUBIR ~'+c1(delta)+' cts la semana que viene. Si puedes, aguanta la venta.'}
@@ -284,6 +347,7 @@ def paso_web(m,historial,diario=None):
              'historial':[{'semana':r['semana'],'anio':r.get('anio'),'pred':r['prediccion'],'real':r.get('real',''),'error':r.get('error_cts',''),'backtest':es_backtest(r)} for r in historial],
              'serie':m['serie'],'serie_paises':m['serie_paises'],'contrib':m['contrib'],'vecinos':m['vecinos'],
              'seas':m['seas'],'semaforo':sem,'escenarios':escenarios,'eventos':eventos,
+             'contexto_mercado':(contexto or {}),
              'diario':(diario or {})}
     pw=os.environ.get('WEB_PASSWORD','cerdo')
     enc=cifrar(json.dumps(payload,ensure_ascii=False),pw)
@@ -295,8 +359,9 @@ if __name__=='__main__':
     print('== 2) Maestro =='); mae=paso_maestro() or {}
     print('== 3) Modelo =='); m=paso_modelo()
     print('== 4) Registro =='); h=paso_registro(m)
+    print('== 4b) Contexto =='); ctx=paso_contexto()
     diario={'ts':datetime.datetime.now().strftime('%d/%m/%Y %H:%M'),
             'pdfs_nuevos':cor[0],'nombres':cor[1][:8],
             'nuevas':mae.get('nuevas',[]),'lat':mae.get('lat',{})}
-    print('== 5) Web =='); paso_web(m,h,diario)
+    print('== 5) Web =='); paso_web(m,h,diario,ctx)
     print(f"\nOK. Último {m['last']['w']}={m['last']['v']} | Predicción sem {m['nextw']}={m['pred']} | error {round(m['mae_m']*100,1)} cts")

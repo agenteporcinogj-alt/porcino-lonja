@@ -27,6 +27,7 @@ jobs:
           add_all() {
             git add data/master.xlsx data/validacion_modelo.csv docs/data.enc.js
             [ -f data/correos_vistos.txt ] && git add data/correos_vistos.txt || true
+            [ -f data/contexto_mercado.json ] && git add data/contexto_mercado.json || true
           }
           add_all
           git diff --cached --quiet && { echo "sin cambios"; exit 0; }

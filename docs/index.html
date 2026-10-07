@@ -743,6 +743,7 @@ function buildEstado(){
       semaforo:D.semaforo,
       escenarios:D.escenarios,
       eventos:D.eventos,
+      contexto_mercado:D.contexto_mercado||null,
       historial:(D.historial||[]).slice(-10),
       serie_precio:(function(){const s=(D.serie||[]).slice(-60);return {etiquetas:s.map(p=>'s'+p.w+'/'+String(p.y).slice(2)),precios:s.map(p=>p.v)};})(),
       serie_paises:(function(){const sp=D.serie_paises;if(!sp)return null;const n=(sp.labels||[]).length,a=Math.max(0,n-52);const cut=x=>(x||[]).slice(a);return {etiquetas:(sp.labels||[]).slice(a).map(l=>'s'+l.w+'/'+String(l.y).slice(2)),espana:cut(sp.esp),francia:cut(sp.fra),alemania:cut(sp.ale),dinamarca:cut(sp.din)};})(),
@@ -801,6 +802,12 @@ Luego responde directo y útil, sin soltar todo el razonamiento interno. Si dete
 4) PRECIOS SIEMPRE A 3 DECIMALES. Cualquier cotización/baremo del cerdo va a 3 decimales (ej. 1,283 €/kg, no 1,28). Es como cotiza la Lonja (Cerdo Blanco). Esto es OBLIGATORIO.
 
 5) CERO INVENTOS. Los números salen del ESTADO, de la FICHA o del DOSSIER de abajo. Si no está, dilo. Nunca te saques cifras de la manga.
+
+5b) CONTEXTO DE MERCADO EN VIVO (ESTADO.contexto_mercado): son datos REALES y FRESCOS que llegan cada semana de los informes de Daniel. ÚSALOS cuando vengan a cuento, no los ignores:
+   - contexto_mercado.europa.datos → precios de porcino de TODA Europa (italia, paises_bajos, belgica, portugal, reino_unido, polonia), además de Francia/Alemania/Dinamarca que ya tienes en 'vecinos'. Sirven para situar España en el mapa europeo (¿caro o barato vs vecinos?).
+   - contexto_mercado.ppa → estado de la Peste Porcina Africana en España. Si 'sin_positivos_domestico' y 'sin_cambios_comercio_exterior' son true, significa que NO hay nuevos vetos de exportación (China/Japón no cierran por esto ahora) — dato clave para la demanda. Usa su 'resumen'.
+   - contexto_mercado.lechon_nacional_20kg → precio del lechón (cría). Es un indicador ADELANTADO del ciclo (lo que se paga por lechones hoy influye en la oferta de cerdos dentro de ~4-5 meses).
+   Cita estos datos con su fecha si la pregunta va de Europa, PPA/sanidad/exportación, China, demanda o el ciclo. Si contexto_mercado es null, di que ese dato aún no ha entrado.
 
 6) CALCULADORA SIEMPRE para aritmética. NUNCA calcules de cabeza (te equivocas). Mete la operación en un bloque calc de UNA línea (solo números y + - * / ( ) . ; sin texto, sin €, sin separador de miles: 55000 no 55.000; sin "="). Ejemplo:
 \`\`\`calc
