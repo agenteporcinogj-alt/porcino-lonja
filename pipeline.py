@@ -200,10 +200,10 @@ def paso_modelo():
     esp={(r['y'],r['w']):r['e'] for r in seq}; allmean=st.mean(esp.values())
     seas={w: st.mean([esp[(y,w)] for y in years if (y,w) in esp])/allmean*100 for w in range(1,53)}
     rows=[]
-    for t in range(2,len(seq)):
-        c,p1,p2=seq[t],seq[t-1],seq[t-2]
+    for t in range(4,len(seq)):
+        c,p1,p2,p3,p4=seq[t],seq[t-1],seq[t-2],seq[t-3],seq[t-4]
         rows.append({'y':c['y'],'w':c['w'],'prev':p1['e'],'dESP':c['e']-p1['e'],'target':c['e'],
-            'x':[1.0,p1['e']-p2['e'],(p1['f']-p2['f']) if p1['f'] and p2['f'] else 0.0,
+            'x':[1.0,p1['e']-p2['e'],p2['e']-p3['e'],p3['e']-p4['e'],(p1['f']-p2['f']) if p1['f'] and p2['f'] else 0.0,
                  (p1['a']-p2['a']) if p1['a'] and p2['a'] else 0.0,(seas[c['w']]-seas[p1['w']])/100.0*allmean]})
     em=[];en=[];within=0;nb=0
     for d in rows:
@@ -214,12 +214,12 @@ def paso_modelo():
         em.append(abs(pr-d['target'])); en.append(abs(d['prev']-d['target']))
         if abs(pr-d['target'])<=0.02: within+=1
         nb+=1
-    beta=fit(rows); last=seq[-1]; p1=seq[-2]; p2=seq[-3]; nextw=last['w']%52+1
-    x=[1.0,last['e']-p1['e'],(last['f']-p1['f']) if last['f'] and p1['f'] else 0.0,
+    beta=fit(rows); last=seq[-1]; p1=seq[-2]; p2=seq[-3]; p3=seq[-4]; nextw=last['w']%52+1
+    x=[1.0,last['e']-p1['e'],p1['e']-p2['e'],p2['e']-p3['e'],(last['f']-p1['f']) if last['f'] and p1['f'] else 0.0,
        (last['a']-p1['a']) if last['a'] and p1['a'] else 0.0,(seas[nextw]-seas[last['w']])/100.0*allmean]
     pred=round(last['e']+sum(bi*xi for bi,xi in zip(beta,x)),3)
-    contrib={'inercia':round(beta[1]*x[1]*100,1),'francia':round(beta[2]*x[2]*100,1),
-             'alemania':round(beta[3]*x[3]*100,1),'estacional':round(beta[4]*x[4]*100,1)}
+    contrib={'inercia':round((beta[1]*x[1]+beta[2]*x[2]+beta[3]*x[3])*100,1),'francia':round(beta[4]*x[4]*100,1),
+             'alemania':round(beta[5]*x[5]*100,1),'estacional':round(beta[6]*x[6]*100,1)}
     vecinos={'francia_delta':round((last['f']-p1['f'])*100,1) if last['f'] and p1['f'] else None,
              'alemania_delta':round((last['a']-p1['a'])*100,1) if last['a'] and p1['a'] else None}
     serie=[{'y':r['y'],'w':r['w'],'v':r['e']} for r in seq[-104:]]
