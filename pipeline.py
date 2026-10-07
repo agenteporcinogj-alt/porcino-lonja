@@ -277,7 +277,7 @@ def paso_web(m,historial,diario=None):
       {'nombre':'Base (modelo)','valor':round(base,3),'txt':'Lo más probable con los datos actuales.'},
       {'nombre':'Se agrava PPA / cierran mercados','valor':round(base-0.15,3),'txt':'Menos exportación, sobra carne → precio abajo. (~-15 cts, ilustrativo)'},
       {'nombre':'China reabre / sube demanda','valor':round(base+0.15,3),'txt':'Más demanda exterior → precio arriba. (~+15 cts, ilustrativo)'}]
-    eventos=[{'fecha':'Oct 2026','titulo':'Densidades ganaderas (Aragón)','txt':'En proceso judicial la aplicación de la norma europea de densidades (cortar colas → más espacio por animal). Si se aplica: menos cerdos por granja → menos oferta española (puede empujar el precio arriba). Para Grupo Jorge supondría perder un porcentaje de su capacidad de cebo (1,5 millones de plazas en ~700 granjas); el % exacto está por ver.'}]
+    eventos=[{'fecha':'Oct 2026','titulo':'Densidades: el Supremo tumba la norma','txt':'El Tribunal Supremo ha ANULADO la exigencia de más espacio por cerdo (RD 159/2023), por no haber valorado su impacto económico. Se vuelve al estándar de 2002. Traducción para el mercado: NO hay recorte forzoso de cabaña → la oferta española no baja por esta vía, así que el escenario "menos cerdos → precio arriba" queda descartado. Para Grupo Jorge: se evita tener que reducir plazas o invertir en ampliar granjas.'}]
     payload={'generado':datetime.datetime.now().strftime('%d/%m/%Y %H:%M'),
              'ultimo':m['last'],'prediccion':{'y':m['nexty'],'w':m['nextw'],'v':m['pred']},'delta_cts':delta,
              'precision':{'modelo_cts':round(m['mae_m']*100,1),'naive_cts':round(m['mae_n']*100,1),'within2':m['within2']},

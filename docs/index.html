@@ -703,12 +703,28 @@ function chatUser(){try{let id=localStorage.getItem('cu_id');if(!id){id='visitan
 let NEEDNAME=false;
 function mdToHtml(s){
   s=String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-  s=s.split('\n').map(l=>{
-    const h=l.match(/^\s*#{1,6}\s+(.*)$/); if(h)return '<b class="h">'+h[1]+'</b>';
-    const b=l.match(/^\s*[-*]\s+(.*)$/); if(b)return '• '+b[1];
-    return l;
-  }).join('\n');
-  return s.replace(/\*\*([^*]+)\*\*/g,'<b>$1</b>').replace(/\n/g,'<br>');
+  const lines=s.split('\n'),out=[];let i=0;
+  const isRow=l=>/^\s*\|.*\|\s*$/.test(l);
+  const isSep=l=>/-/.test(l)&&/^\s*\|?[\s:|-]+\|?\s*$/.test(l);
+  const cells=l=>l.trim().replace(/^\|/,'').replace(/\|$/,'').split('|').map(c=>c.trim());
+  const TD='style="padding:3px 8px;border-bottom:1px solid var(--line)"';
+  while(i<lines.length){
+    if(isRow(lines[i])&&i+1<lines.length&&isSep(lines[i+1])){      // tabla markdown -> <table>
+      const head=cells(lines[i]);i+=2;const rows=[];
+      while(i<lines.length&&isRow(lines[i])&&!isSep(lines[i])){rows.push(cells(lines[i]));i++;}
+      let t='<table style="border-collapse:collapse;width:100%;margin:7px 0;font-size:13px"><thead><tr>'
+        +head.map(c=>'<th '+TD+';text-align:left;color:var(--muted);font-weight:700">'+c+'</th>').join('')+'</tr></thead><tbody>';
+      t+=rows.map(r=>'<tr>'+r.map(c=>'<td '+TD+'>'+c+'</td>').join('')+'</tr>').join('')+'</tbody></table>';
+      out.push({tab:true,h:t});
+    }else{
+      let l=lines[i];const h=l.match(/^\s*#{1,6}\s+(.*)$/),b=l.match(/^\s*[-*]\s+(.*)$/);
+      if(h)l='<b class="h">'+h[1]+'</b>';else if(b)l='• '+b[1];
+      out.push({tab:false,h:l});i++;
+    }
+  }
+  let html='',buf=[];const flush=()=>{if(buf.length){html+=buf.join('<br>');buf=[];}};
+  out.forEach(o=>{if(o.tab){flush();html+=o.h;}else buf.push(o.h);});flush();
+  return html.replace(/\*\*([^*]+)\*\*/g,'<b>$1</b>');
 }
 function buildEstado(){
   try{
@@ -757,7 +773,7 @@ const FICHA_EMPRESA=`FICHA DE GRUPO JORGE (datos reales de la empresa; úsalos, 
 - Sacrificio: ~55.000 cerdos/semana, de ~120 kg cada uno.
 - Sensibilidad: 1 céntimo/kg = ~66.000 €/semana (55.000 × 120 × 0,01) ≈ 3,43 M€/año.
 - Es PRODUCTOR/vendedor: un precio que BAJA le PERJUDICA (cobra menos por sus cerdos); uno que SUBE le beneficia.
-- Dato sensible: lo del "juicio de densidades" afecta a un % de esas 1,5M plazas; NO digas "~740 cebos" (eso es falso). Si no tienes el % exacto, di que supondría perder "un porcentaje de la capacidad de cebo" sin cerrar una cifra.`;
+- Dato sensible: lo del "juicio de densidades" ya se resolvió (el Supremo tumbó la norma en oct-2026, se vuelve al estándar de 2002), así que NO hay recorte forzoso de plazas; no lo cuentes como amenaza pendiente ni des cifras de plazas perdidas. NUNCA digas "~740 cebos" (es falso).`;
 const DOSSIER_MERCADO=`DOSSIER DE MERCADO (contexto verificado a oct-2026; es tu conocimiento de fondo, cítalo con criterio, no como predicción):
 - Situación 2026: mucha carne de cerdo en Europa (sobreoferta), precios de exportación tocados. España exportó +1,6% en volumen pero −14,8% en valor en el 1T (precio medio 2,57 €/kg, −16,2%): el problema es el PRECIO, no perder clientes.
 - PPA (peste porcina africana): España tiene brotes que se agravan hacia finales de noviembre. La PPA dispara BLOQUEOS SANITARIOS de terceros países al cerdo español (China, Japón vetan por sanidad, no por falta de ganas). Un veto puede REABRIR cuando se controle; no es demanda perdida para siempre.
@@ -765,7 +781,7 @@ const DOSSIER_MERCADO=`DOSSIER DE MERCADO (contexto verificado a oct-2026; es tu
 - Japón: −61% (probable bloqueo sanitario por PPA). Corea del Sur (+48%), Vietnam (+166%), Polonia, Chequia, Rumanía crecen, PERO son MUCHO más pequeños (Vietnam en todo 2024 = 17.367 t = lo que China compra en ~2 semanas). En toneladas los nuevos sí compensan; en dinero no.
 - Ciclo biológico clave (tesis de recuperación): desde que se sacrifica una cerda madre hasta que sus crías dejan de llegar a matadero pasan ~6 meses. Si en nov-dic 2026 se sacrifica ~5% de la cabaña europea de cerdas, el efecto en precios llegaría hacia mayo-junio 2027.
 - Estacionalidad (17 años): enero es el suelo (~−11% sobre la media), verano (julio) el pico (~+9%, barbacoas + exportación). El modelo ya tiene esto dentro.
-- Evento vigilado: juicio de densidades (Aragón, 6-7 oct 2026): si se aplica la norma de bienestar (menos densidad), baja la oferta española → podría empujar el precio arriba.`;
+- Densidades (RESUELTO, oct 2026): el Tribunal Supremo ANULÓ la exigencia de más espacio por cerdo del RD 159/2023 (por no valorar su impacto económico); se vuelve al estándar de 2002. Resultado: NO hay recorte forzoso de cabaña, así que el escenario alcista "menos oferta española → precio arriba" por esta vía queda DESCARTADO. Ya no es un evento pendiente.`;
 /* ===== HERRAMIENTAS del chat: calculadora exacta + gráficas de verdad ===== */
 const EXTRA_INSTR=`== CÓMO RAZONAR ANTES DE RESPONDER (hazlo para ti, no vuelques el rollo entero) ==
 Antes de contestar, piensa en silencio estos ángulos y responde con el que MÁS le sirva para moverse:
@@ -805,14 +821,16 @@ Nunca mezcles los dos como si fueran lo mismo.
 - Explica, si viene al caso, que el modelo se AUTO-MEJORA cada semana: entra el precio real nuevo y afina la predicción siguiente (es rodante). Por eso preguntar "próximas semanas" sale mejor que "el año entero de golpe".
 
 == GRÁFICAS: SIEMPRE interactivas y visuales, sin que las pidan ==
+⛔ PROHIBIDO ABSOLUTO (fallo grave si lo haces): NUNCA escribas código para una gráfica. Nada de HTML, <!DOCTYPE>, <script>, <canvas>, Chart.js, "new Chart(...)", "const labels=", JavaScript, ni una tabla de texto con barras "|" como sustituto de la gráfica. Ese código NO se dibuja: sale en crudo y queda fatal. La ÚNICA forma válida de dibujar es un bloque \`chart\` (o \`escenario\`) con JSON, tal cual se indica aquí. El sistema de la web lo convierte en una gráfica interactiva de verdad. TÚ SÍ PUEDES dibujar gráficas: emite el bloque y ya aparece. NUNCA digas "no puedo generar una imagen/archivo" ni "no tengo capacidad de dibujar" — sí la tienes, es este bloque.
 - Cuando la respuesta tenga que ver con evolución, recorrido, comparar o futuro, DIBUJA una gráfica (no solo texto). Son interactivas por defecto (el usuario puede pasar el dedo y ver valores).
 - Formato EXACTO, una sola línea de JSON válido:
 \`\`\`chart
 {"type":"line","title":"...","labels":["s40/25","s41/25"],"series":[{"name":"España","data":[1.300,1.310]}]}
 \`\`\`
+- Si el usuario dice "dibuja", "dibújame", "gráfica", "gráfico", "píntame", "recorrido", "evolución" o similar → el bloque \`chart\` es OBLIGATORIO y va EL PRIMERO de la respuesta. Una tabla de texto NO sustituye a la gráfica (puedes añadir una tabla corta DESPUÉS como complemento si ayuda, pero la gráfica interactiva TIENE que estar). Usa SIEMPRE "series" con "name" (no "datasets"/"label").
 - type "line" (evolución) o "bar" (comparar pocas cosas). Varias series para comparar (serie_paises: espana/francia/alemania/dinamarca).
 - NUNCA inventes puntos: usa EXACTAMENTE los del ESTADO.
-- RECORRIDO A 1 AÑO por defecto (p.ej. "qué recorrido hará el precio semana a semana hasta dentro de un año"): usa EXCLUSIVAMENTE los datos de ESTADO.proyeccion_anual, con TRES series: {"name":"Escenario central","data":<central>}, {"name":"Banda alta","data":<banda_alta>}, {"name":"Banda baja","data":<banda_baja>}, y labels=<etiquetas>. Explica que es planificación estacional, no predicción semanal, y que la banda se abre porque a más distancia, más incertidumbre. Lectura por tramos (otoño/invierno/primavera) con el DOSSIER.
+- RECORRIDO FUTURO a varias semanas, MESES o 1 AÑO (p.ej. "el precio semana a semana de aquí a 4 meses", "cómo se comporta el precio este año"): usa EXCLUSIVAMENTE los datos de ESTADO.proyeccion_anual, con TRES series: {"name":"Escenario central","data":<central>}, {"name":"Banda alta","data":<banda_alta>}, {"name":"Banda baja","data":<banda_baja>}, y labels=<etiquetas>. Si piden un horizonte corto (ej. "4 meses" ≈ 17 semanas, "1 mes" ≈ 5, "2 meses" ≈ 9), RECORTA las cuatro listas (etiquetas, central, banda_alta, banda_baja) a ese número de semanas desde el principio; para "un año" o sin horizonte usa las 52 enteras. Explica que es planificación estacional, no predicción semanal, y que la banda se abre porque a más distancia, más incertidumbre. Lectura por tramos (otoño/invierno/primavera) con el DOSSIER.
 
 - ESCENARIO PERSONALIZADO (CLAVE): si el usuario te da SU hipótesis de precio ("creo que a fin de año estará a 1€", "se hunde a 0,95 en enero y recupera en primavera"), NO inventes tú la curva (eso da resultados distintos cada vez). Emite un bloque \`escenario\` con las anclas que te diga y el SISTEMA construye la curva coherente (misma siempre) sobre el central del modelo. Formato EXACTO:
 \`\`\`escenario
@@ -836,7 +854,8 @@ function fmtCalc(n){const a=Math.abs(n);const dec=a>=1000?0:(a>=1?2:3);return n.
 function chartGeom(spec){
   const type=(spec.type==='bar')?'bar':'line';
   const labels=Array.isArray(spec.labels)?spec.labels.map(String):[];
-  const series=Array.isArray(spec.series)?spec.series.filter(s=>s&&Array.isArray(s.data)):[];
+  const rawS=Array.isArray(spec.series)?spec.series:(Array.isArray(spec.datasets)?spec.datasets:[]);  // acepta series/name Y datasets/label (Chart.js)
+  const series=rawS.filter(s=>s&&Array.isArray(s.data)).map(s=>({name:s.name||s.label||'',data:s.data,color:s.color}));
   let all=[];series.forEach(s=>s.data.forEach(v=>{if(typeof v==='number'&&isFinite(v))all.push(v)}));
   let lo=all.length?Math.min(...all):0,hi=all.length?Math.max(...all):1;if(lo===hi){lo-=1;hi+=1;}
   const pad=(hi-lo)*0.12;lo-=pad;hi+=pad;
@@ -909,7 +928,32 @@ function wireChatChart(box,spec){
     cov.addEventListener('touchstart',move,{passive:true});cov.addEventListener('touchmove',e=>{e.preventDefault();move(e);},{passive:false});
   }catch(e){}
 }
+/* RED DE SEGURIDAD: si el modelo suelta código de gráfica (Chart.js/HTML) en vez del bloque chart,
+   lo rescatamos extrayendo los datos; si no se puede, lo quitamos (NUNCA código en crudo). */
+function salvageChart(raw){
+  raw=String(raw||'');
+  if(!/```(?:html|js|javascript|xml)/i.test(raw)&&!/new Chart\s*\(|<canvas|<!DOCTYPE|getElementById\(['"]chart/i.test(raw))return raw;
+  const stripCode=s=>s.replace(/```(?:html|js|javascript|xml)?\s*[\s\S]*?```/gi,'').replace(/<!DOCTYPE[\s\S]*$/i,'').trim();
+  try{
+    const labM=raw.match(/labels\s*=\s*(\[[^\]]*\])/i);
+    if(!labM)return stripCode(raw);
+    const labels=JSON.parse(labM[1].replace(/'/g,'"'));
+    const nice={central:'Escenario central',previsioncentral:'Escenario central',bandabaja:'Banda baja',banda_baja:'Banda baja',bandaalta:'Banda alta',banda_alta:'Banda alta'};
+    const arrRe=/(\w+)\s*=\s*(\[\s*-?\d[\d\s.,\-]*\])/g,series=[];let a;
+    while((a=arrRe.exec(raw))){
+      const key=a[1].toLowerCase();if(key==='labels')continue;
+      let data;try{data=JSON.parse(a[2]);}catch(_){continue;}
+      if(!Array.isArray(data)||!data.length||data.some(x=>typeof x!=='number'))continue;
+      series.push({name:nice[key]||a[1],data});
+    }
+    if(!series.length)return stripCode(raw);
+    series.sort((x,y)=>(/central/i.test(x.name)?-1:/central/i.test(y.name)?1:0));
+    const chart='```chart\n'+JSON.stringify({type:'line',title:'Proyección',labels,series})+'\n```';
+    return raw.replace(/```(?:html|js|javascript|xml)?\s*[\s\S]*?```/gi,chart).replace(/<!DOCTYPE[\s\S]*$/i,'').trim();
+  }catch(e){return stripCode(raw);}
+}
 function addBotRich(raw){
+  raw=salvageChart(raw);
   const b=document.createElement('div');b.className='bub bot';
   const re=/```(chart|calc|escenario)\s*([\s\S]*?)```/gi;let last=0,m;
   while((m=re.exec(raw))){
@@ -937,7 +981,7 @@ function addBotRich(raw){
   if(!b.childNodes.length)b.innerHTML=mdToHtml(raw);
   $('cbody').appendChild(b);$('cbody').scrollTop=$('cbody').scrollHeight;return b;
 }
-function cleanForLog(raw){return String(raw).replace(/```chart[\s\S]*?```/gi,'[gráfica mostrada]').replace(/```escenario[\s\S]*?```/gi,'[escenario mostrado]').replace(/```calc\s*([\s\S]*?)```/gi,(_,e)=>{const r=safeCalc(e);return r?(r.expr+' = '+fmtCalc(r.val)):e.trim();}).replace(/\s+/g,' ').trim();}
+function cleanForLog(raw){return String(raw).replace(/```(?:html|js|javascript|xml)[\s\S]*?```/gi,'[gráfica mostrada]').replace(/```chart[\s\S]*?```/gi,'[gráfica mostrada]').replace(/```escenario[\s\S]*?```/gi,'[escenario mostrado]').replace(/```calc\s*([\s\S]*?)```/gi,(_,e)=>{const r=safeCalc(e);return r?(r.expr+' = '+fmtCalc(r.val)):e.trim();}).replace(/\s+/g,' ').trim();}
 /* Pinta un bloque especial (gráfica/escenario/cálculo) ya montado */
 function pintaBloque(b,kind,content){
   if(kind==='chart'){const box=document.createElement('div');box.className='chatchart';let spec=null;try{spec=JSON.parse(content.trim());box.innerHTML=chatChart(spec);}catch(e){box.innerHTML='<div class="cct">(no pude dibujar la gráfica)</div>';}b.appendChild(box);if(spec)wireChatChart(box,spec);}
@@ -946,6 +990,7 @@ function pintaBloque(b,kind,content){
 }
 /* Máquina de escribir: revela la respuesta poco a poco (rápido), las gráficas aparecen montadas */
 async function typeBotRich(raw){
+  raw=salvageChart(raw);
   const sleep=ms=>new Promise(r=>setTimeout(r,ms));
   const b=document.createElement('div');b.className='bub bot';$('cbody').appendChild(b);
   const scroll=()=>{$('cbody').scrollTop=$('cbody').scrollHeight;};
