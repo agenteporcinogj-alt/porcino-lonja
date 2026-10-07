@@ -470,7 +470,7 @@ function renderWhy(d){
   });
 }
 function renderEsc(d){
-  $('esc').innerHTML=d.escenarios.map(e=>'<div class="escrow"><div class="en">'+e.nombre+'<b>'+e.txt+'</b></div><div class="ev">'+fmt(e.valor)+' €</div></div>').join('');
+  $('esc').innerHTML=d.escenarios.map(e=>'<div class="escrow"><div class="en">'+e.nombre+'<b>'+e.txt+'</b></div><div class="ev">'+fmt(e.valor,3)+' €</div></div>').join('');
 }
 function renderEvt(d){
   $('eventos').innerHTML=d.eventos.map(e=>'<div class="evt"><div class="d">'+e.fecha+'</div><div><h3>'+e.titulo+'</h3><p>'+e.txt+'</p></div></div>').join('');
@@ -562,9 +562,9 @@ function drawChart(serie){
   host.innerHTML='<svg viewBox="0 0 '+W+' '+H+'">'+g+yr+'<path d="'+path+'" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linejoin="round"/><circle cx="'+X(N-1)+'" cy="'+Y(last.v)+'" r="3.5" fill="var(--accent)"/><rect id="cov" x="'+mL+'" y="'+mT+'" width="'+(W-mL-mR)+'" height="'+(H-mT-mB)+'" fill="transparent"/><line id="ccr" x1="0" y1="'+mT+'" x2="0" y2="'+(H-mB)+'" stroke="var(--ink)" stroke-width="1" opacity="0"/><circle id="cdt" r="3.5" fill="var(--accent)" opacity="0"/></svg>';
   let tip=host.querySelector('.ctip');if(!tip){tip=document.createElement('div');tip.className='ctip';host.appendChild(tip);}
   const cov=host.querySelector('#cov'),cr=host.querySelector('#ccr'),dt=host.querySelector('#cdt');
-  cov.addEventListener('mousemove',ev=>{const bx=host.getBoundingClientRect(),px=(ev.clientX-bx.left)*(W/bx.width);let k=Math.round(((px-mL)/(W-mL-mR))*(N-1));k=Math.max(0,Math.min(N-1,k));const p=serie[k],x=X(k),y=Y(p.v);cr.setAttribute('x1',x);cr.setAttribute('x2',x);cr.setAttribute('opacity',.35);dt.setAttribute('cx',x);dt.setAttribute('cy',y);dt.setAttribute('opacity',1);tip.style.opacity=1;tip.style.left=(x/W*bx.width)+'px';tip.style.top=(y/H*bx.height)+'px';tip.innerHTML=fmt(p.v)+' € · sem '+p.w+'/'+p.y;});
+  cov.addEventListener('mousemove',ev=>{const bx=host.getBoundingClientRect(),px=(ev.clientX-bx.left)*(W/bx.width);let k=Math.round(((px-mL)/(W-mL-mR))*(N-1));k=Math.max(0,Math.min(N-1,k));const p=serie[k],x=X(k),y=Y(p.v);cr.setAttribute('x1',x);cr.setAttribute('x2',x);cr.setAttribute('opacity',.35);dt.setAttribute('cx',x);dt.setAttribute('cy',y);dt.setAttribute('opacity',1);tip.style.opacity=1;tip.style.left=(x/W*bx.width)+'px';tip.style.top=(y/H*bx.height)+'px';tip.innerHTML=fmt(p.v,3)+' € · sem '+p.w+'/'+p.y;});
   cov.addEventListener('mouseleave',()=>{cr.setAttribute('opacity',0);dt.setAttribute('opacity',0);tip.style.opacity=0;});
-  cov.addEventListener('touchmove',ev=>{ev.preventDefault();const bx=host.getBoundingClientRect(),px=(ev.touches[0].clientX-bx.left)*(W/bx.width);let k=Math.round(((px-mL)/(W-mL-mR))*(N-1));k=Math.max(0,Math.min(N-1,k));const p=serie[k],x=X(k),y=Y(p.v);cr.setAttribute('x1',x);cr.setAttribute('x2',x);cr.setAttribute('opacity',.35);dt.setAttribute('cx',x);dt.setAttribute('cy',y);dt.setAttribute('opacity',1);tip.style.opacity=1;tip.style.left=(x/W*bx.width)+'px';tip.style.top=(y/H*bx.height)+'px';tip.innerHTML=fmt(p.v)+' € · sem '+p.w+'/'+p.y;},{passive:false});
+  cov.addEventListener('touchmove',ev=>{ev.preventDefault();const bx=host.getBoundingClientRect(),px=(ev.touches[0].clientX-bx.left)*(W/bx.width);let k=Math.round(((px-mL)/(W-mL-mR))*(N-1));k=Math.max(0,Math.min(N-1,k));const p=serie[k],x=X(k),y=Y(p.v);cr.setAttribute('x1',x);cr.setAttribute('x2',x);cr.setAttribute('opacity',.35);dt.setAttribute('cx',x);dt.setAttribute('cy',y);dt.setAttribute('opacity',1);tip.style.opacity=1;tip.style.left=(x/W*bx.width)+'px';tip.style.top=(y/H*bx.height)+'px';tip.innerHTML=fmt(p.v,3)+' € · sem '+p.w+'/'+p.y;},{passive:false});
 }
 let COMOV_SP=null;const COMOV_HIDE={};
 const COMOV_SER=[['esp','España','#E0655B','🔴'],['fra','Francia','#5b8def','🔵'],['ale','Alemania','#e0b23b','🟡'],['din','Dinamarca','#3fae6b','🟢']];
@@ -611,7 +611,7 @@ const A={
  decision:()=>D.semaforo.estado+' → '+D.semaforo.txt,
  vecinos:()=>{const fr=D.vecinos.francia_delta,al=D.vecinos.alemania_delta;return 'Los mercados van juntos, pero <b>Francia y Alemania se mueven ~1 semana antes</b> que España. Esta semana Francia '+(fr>0?'subió':fr<0?'bajó':'no se movió')+' <b>'+fmt(Math.abs(fr),1)+' cts</b> y Alemania '+(al>0?'subió':al<0?'bajó':'repitió')+' <b>'+fmt(Math.abs(al),1)+' cts</b> → por eso arrastran a España.';},
  fiabilidad:()=>'El modelo se equivoca de media <b>'+fmt(D.precision.modelo_cts,1)+' céntimos</b> (menos de 1 cts = 0,01 €) y acierta dentro de 2 cts el <b>'+D.precision.within2+'%</b> de las semanas. Le gana a "copiar la semana anterior" (que falla '+fmt(D.precision.naive_cts,1)+' cts). <span class="mini">Cada semana se contrasta con Mercolleida, mira la tabla de abajo.</span>',
- escenarios:()=>'Si <b>China reabre</b> o sube la demanda → hacia <b>'+fmt(D.escenarios[2].valor)+' €</b>. Si se <b>agrava la PPA</b> y cierran mercados → hacia <b>'+fmt(D.escenarios[1].valor)+' €</b>. Base del modelo: <b>'+fmt(D.escenarios[0].valor)+' €</b>. <span class="mini">Ilustrativo, no cerrado.</span>',
+ escenarios:()=>'Si <b>China reabre</b> o sube la demanda → hacia <b>'+fmt(D.escenarios[2].valor,3)+' €</b>. Si se <b>agrava la PPA</b> y cierran mercados → hacia <b>'+fmt(D.escenarios[1].valor,3)+' €</b>. Base del modelo: <b>'+fmt(D.escenarios[0].valor,3)+' €</b>. <span class="mini">Ilustrativo, no cerrado.</span>',
  evento:()=>'📅 <b>'+D.eventos[0].titulo+' ('+D.eventos[0].fecha+')</b>: '+D.eventos[0].txt,
  estacional:()=>'El precio hace lo mismo cada año: <b>caro en julio</b> (+9% sobre la media) y <b>barato en enero</b> (−11%). Esta semana la temporada aporta <b>'+scts(D.contrib.estacional)+'</b> a la predicción.',
  fecha:()=>'Hoy estamos en la <b>semana '+isoWeek(new Date())+'</b> del año. La predicción es para la <b>semana '+D.prediccion.w+'</b>, que va del <b>'+weekRange(D.prediccion.y,D.prediccion.w)+'</b>.',

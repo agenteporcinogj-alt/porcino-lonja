@@ -274,10 +274,10 @@ def paso_web(m,historial,diario=None):
     elif delta<=-1.0: sem={'estado':'VENDE','color':'rojo','txt':'El precio va a BAJAR ~'+c1(abs(delta))+' cts la semana que viene. Vender ahora protege margen.'}
     else: sem={'estado':'ESTABLE','color':'ambar','txt':'Precio estable (±'+c1(abs(delta))+' cts). Sin presión para adelantar ni retrasar ventas.'}
     escenarios=[
-      {'nombre':'Base (modelo)','valor':round(base,2),'txt':'Lo más probable con los datos actuales.'},
-      {'nombre':'Se agrava PPA / cierran mercados','valor':round(base-0.15,2),'txt':'Menos exportación, sobra carne → precio abajo. (~-15 cts, ilustrativo)'},
-      {'nombre':'China reabre / sube demanda','valor':round(base+0.15,2),'txt':'Más demanda exterior → precio arriba. (~+15 cts, ilustrativo)'}]
-    eventos=[{'fecha':'6-7 oct 2026','titulo':'Juicio de densidades (Aragón)','txt':'Un juez decide si se aplica la norma europea de densidades (cortar colas → más espacio por animal). Si sale adelante: menos cerdos por granja → menos oferta española (puede empujar el precio arriba). Para Grupo Jorge supondría perder un porcentaje de su capacidad de cebo (1,5 millones de plazas en ~700 granjas); el % exacto está por ver.'}]
+      {'nombre':'Base (modelo)','valor':round(base,3),'txt':'Lo más probable con los datos actuales.'},
+      {'nombre':'Se agrava PPA / cierran mercados','valor':round(base-0.15,3),'txt':'Menos exportación, sobra carne → precio abajo. (~-15 cts, ilustrativo)'},
+      {'nombre':'China reabre / sube demanda','valor':round(base+0.15,3),'txt':'Más demanda exterior → precio arriba. (~+15 cts, ilustrativo)'}]
+    eventos=[{'fecha':'Oct 2026','titulo':'Densidades ganaderas (Aragón)','txt':'En proceso judicial la aplicación de la norma europea de densidades (cortar colas → más espacio por animal). Si se aplica: menos cerdos por granja → menos oferta española (puede empujar el precio arriba). Para Grupo Jorge supondría perder un porcentaje de su capacidad de cebo (1,5 millones de plazas en ~700 granjas); el % exacto está por ver.'}]
     payload={'generado':datetime.datetime.now().strftime('%d/%m/%Y %H:%M'),
              'ultimo':m['last'],'prediccion':{'y':m['nexty'],'w':m['nextw'],'v':m['pred']},'delta_cts':delta,
              'precision':{'modelo_cts':round(m['mae_m']*100,1),'naive_cts':round(m['mae_n']*100,1),'within2':m['within2']},
