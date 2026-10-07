@@ -24,7 +24,7 @@ def paso_correo():
     os.makedirs(PDFS,exist_ok=True)
     if not user or not pw:
         print('  (sin credenciales de correo, uso lo que haya en disco)'); return 0,[]
-    since=(datetime.date.today()-datetime.timedelta(days=30)).strftime('%d-%b-%Y')
+    since=(datetime.date.today()-datetime.timedelta(days=12)).strftime('%d-%b-%Y')  # 12d basta: el historico esta en master.xlsx. Evita re-descargar 30d de PDFs cada run (OVERQUOTA Gmail IMAP)
     M=imaplib.IMAP4_SSL('imap.gmail.com'); M.login(user,pw); M.select('INBOX')
     typ,data=M.search(None,f'(SINCE {since})'); ids=data[0].split()
     saved=0; nombres=[]
