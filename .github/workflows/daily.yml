@@ -27,11 +27,21 @@ jobs:
         run: |
           git config user.name "porcino-bot"
           git config user.email "bot@users.noreply.github.com"
-          git add data/master.xlsx data/validacion_modelo.csv docs/data.enc.js
-          [ -f data/correos_vistos.txt ] && git add data/correos_vistos.txt || true
-          git commit -m "Actualizacion automatica $(date +%F)" || { echo "sin cambios"; exit 0; }
-          for i in 1 2 3 4 5; do
-            git pull --rebase --autostash origin main && git push && exit 0
-            echo "push colisiono, reintento $i..."; sleep $((RANDOM % 10 + 5))
+          add_all() {
+            git add data/master.xlsx data/validacion_modelo.csv docs/data.enc.js
+            [ -f data/correos_vistos.txt ] && git add data/correos_vistos.txt || true
+          }
+          add_all
+          git diff --cached --quiet && { echo "sin cambios"; exit 0; }
+          # Reaplicamos NUESTROS ficheros regenerados SOBRE el ultimo origin, sin fusionar binarios
+          # (reset --soft nunca entra en conflicto; nuestra version, la mas fresca, siempre gana).
+          for i in 1 2 3 4 5 6; do
+            git fetch -q origin main
+            git reset --soft origin/main
+            add_all
+            git diff --cached --quiet && { echo "ya estaba al dia"; exit 0; }
+            git commit -q -m "Actualizacion automatica $(date +%F)"
+            git push -q && { echo "push OK (intento $i)"; exit 0; }
+            echo "push colisiono, reintento $i..."; sleep $((RANDOM % 8 + 3))
           done
-          echo "no se pudo pushear tras 5 reintentos"; exit 1
+          echo "no se pudo pushear tras varios reintentos"; exit 1
