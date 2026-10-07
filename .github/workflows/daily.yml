@@ -28,6 +28,7 @@ jobs:
           git config user.name "porcino-bot"
           git config user.email "bot@users.noreply.github.com"
           git add data/master.xlsx data/validacion_modelo.csv docs/data.enc.js
+          [ -f data/correos_vistos.txt ] && git add data/correos_vistos.txt || true
           git commit -m "Actualizacion automatica $(date +%F)" || { echo "sin cambios"; exit 0; }
           for i in 1 2 3 4 5; do
             git pull --rebase --autostash origin main && git push && exit 0

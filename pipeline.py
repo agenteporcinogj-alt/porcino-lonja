@@ -13,6 +13,7 @@ HERE=os.path.dirname(os.path.abspath(__file__))
 PDFS=os.path.join(HERE,'_pdfs')
 MASTER=os.path.join(HERE,'data','master.xlsx')
 LOG=os.path.join(HERE,'data','validacion_modelo.csv')
+VISTOS=os.path.join(HERE,'data','correos_vistos.txt')  # Message-IDs ya procesados (persiste en el repo -> no re-descargar correos = no OVERQUOTA)
 ENC_OUT=os.path.join(HERE,'docs','data.enc.js')
 NUM=re.compile(r'-?\d+,\d+')
 def tf(s): return float(s.replace('.','').replace(',','.'))
@@ -24,11 +25,26 @@ def paso_correo():
     os.makedirs(PDFS,exist_ok=True)
     if not user or not pw:
         print('  (sin credenciales de correo, uso lo que haya en disco)'); return 0,[]
-    since=(datetime.date.today()-datetime.timedelta(days=12)).strftime('%d-%b-%Y')  # 12d basta: el historico esta en master.xlsx. Evita re-descargar 30d de PDFs cada run (OVERQUOTA Gmail IMAP)
+    # Manifiesto de correos ya procesados: evita re-descargar mensajes en cada run (causa del OVERQUOTA de Gmail).
+    vistos=set()
+    if os.path.exists(VISTOS):
+        try: vistos=set(l.strip() for l in open(VISTOS) if l.strip())
+        except: vistos=set()
+    since=(datetime.date.today()-datetime.timedelta(days=12)).strftime('%d-%b-%Y')  # ventana acotada: el historico ya esta en master.xlsx
     M=imaplib.IMAP4_SSL('imap.gmail.com'); M.login(user,pw); M.select('INBOX')
     typ,data=M.search(None,f'(SINCE {since})'); ids=data[0].split()
-    saved=0; nombres=[]
+    saved=0; nombres=[]; nuevos=[]; en_ventana=[]
     for i in ids:
+        # 1) Solo la cabecera Message-ID (ligero, NO descarga adjuntos)
+        typ,hd=M.fetch(i,'(BODY.PEEK[HEADER.FIELDS (MESSAGE-ID)])')
+        mid=''
+        try:
+            if hd and hd[0] and hd[0][1]: mid=(email.message_from_bytes(hd[0][1]).get('Message-ID') or '').strip()
+        except: mid=''
+        if mid: en_ventana.append(mid)
+        if mid and mid in vistos:
+            continue  # ya procesado antes -> no bajamos el mensaje completo
+        # 2) Mensaje nuevo: ahora si lo descargamos entero y sacamos los PDFs
         typ,md=M.fetch(i,'(RFC822)'); msg=email.message_from_bytes(md[0][1])
         for part in msg.walk():
             if part.get_content_maintype()=='multipart': continue
@@ -40,7 +56,16 @@ def paso_correo():
             path=os.path.join(PDFS,nm)
             if os.path.exists(path): continue
             with open(path,'wb') as f: f.write(part.get_payload(decode=True)); saved+=1; nombres.append(nm)
-    M.logout(); print(f'  PDFs nuevos del correo: {saved}'); return saved,nombres
+        if mid: nuevos.append(mid)
+    M.logout()
+    # Guardar manifiesto: lo ya visto que sigue en ventana + lo nuevo (evita que crezca sin fin y que "olvide" lo de la ventana).
+    if nuevos:
+        actualizado=[m for m in vistos if m in set(en_ventana)]+nuevos
+        try:
+            with open(VISTOS,'w') as f: f.write('\n'.join(actualizado[-3000:])+'\n')
+        except Exception as e: print('  (aviso: no se pudo guardar manifiesto:',e,')')
+    print(f'  PDFs nuevos: {saved} | mensajes nuevos: {len(nuevos)} | ya vistos en ventana: {len(en_ventana)-len(nuevos)}')
+    return saved,nombres
 
 # ---------- extraccion ----------
 def isoweek(fn,pfx):
