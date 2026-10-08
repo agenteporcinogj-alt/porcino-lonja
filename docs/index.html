@@ -1061,6 +1061,12 @@ function stripModelChartExcuse(text){
     .replace(/\[\s*gr[aá]fica\s*\]/gi,'')
     .replace(/\n{3,}/g,'\n\n').trim();
 }
+function computeInlineCalc(text){
+  // El modelo a veces escribe [calc:13.4*66000] o calc:... en crudo -> lo calculamos nosotros.
+  return String(text||'')
+    .replace(/\[\s*calc\s*:\s*([^\]]+)\]/gi,(m,e)=>{const r=safeCalc(e);return r?fmtCalc(r.val):m;})
+    .replace(/`calc:\s*([^`]+)`/gi,(m,e)=>{const r=safeCalc(e);return r?fmtCalc(r.val):m;});
+}
 async function ask(text){
   text=(text||'').trim();if(!text||sending)return;   // evita doble envío
   sending=true;$('csend').disabled=true;
@@ -1089,6 +1095,7 @@ async function ask(text){
       if(data&&data.respuesta)ansText=data.respuesta;
     }catch(e){}
     if(ansText){
+      ansText=computeInlineCalc(ansText);   // resuelve cualquier [calc:...] que el modelo suelte en crudo
       if(hw>0){
         const cb=trajChartBlock(hw,solo);
         if(cb) ansText=cb+'\n\n'+stripModelChartExcuse(ansText);   // la WEB dibuja la gráfica real; el modelo solo pone el análisis
