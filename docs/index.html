@@ -1020,6 +1020,42 @@ let CHATLOG=[];                              // hilo en texto plano {role,conten
 let sending=false;
 function pushLog(role,content){CHATLOG.push({role,content});if(CHATLOG.length>12)CHATLOG=CHATLOG.slice(-12);}
 function stripTags(h){const d=document.createElement('div');d.innerHTML=h;return (d.textContent||'').trim();}
+/* ==== GRÁFICA GARANTIZADA: si el usuario pide una gráfica/recorrido, la dibuja la WEB con datos reales,
+   pase lo que pase que diga el modelo (que a veces se niega "soy texto"). ==== */
+function chartHorizonWeeks(text){
+  const t=(text||'').toLowerCase();
+  if(!/(gr[aá]fic|graf|dibuj|p[ií]nta|recorrido|evoluci|curva|comporta|trayectoria|semana a semana|pr[oó]xim|c[oó]mo (va|ira|irá|evolucion|se comporta))/.test(t)) return 0;
+  if(/a[nñ]o|12\s*mes|doce meses/.test(t)) return 52;
+  const m=t.match(/(\d+)\s*(semanas?|meses?|a[nñ]os?)/);
+  if(m){const n=parseInt(m[1]),u=m[2];
+    if(u.startsWith('seman')) return Math.min(52,Math.max(2,n));
+    if(u.startsWith('mes'))   return Math.min(52,Math.max(3,n*4+1));
+    return 52;}
+  if(/un mes|1 mes/.test(t)) return 5;
+  if(/dos meses/.test(t)) return 9;
+  if(/tres meses/.test(t)) return 13;
+  if(/cuatro meses/.test(t)) return 17;
+  return 17; // gráfica de recorrido sin horizonte claro -> ~4 meses
+}
+function trajChartBlock(weeks,soloCentral){
+  try{
+    const pa=buildEstado().proyeccion_anual; if(!pa||!pa.central) return '';
+    const n=Math.min(weeks,pa.etiquetas.length);
+    const series=[{name:'Precio estimado',data:pa.central.slice(0,n)}];
+    if(!soloCentral){series.push({name:'Banda alta',data:pa.banda_alta.slice(0,n)});series.push({name:'Banda baja',data:pa.banda_baja.slice(0,n)});}
+    return '```chart\n'+JSON.stringify({type:'line',title:'Recorrido estimado del precio (€/kg)',labels:pa.etiquetas.slice(0,n),series})+'\n```';
+  }catch(e){return '';}
+}
+function stripModelChartExcuse(text){
+  return String(text||'')
+    .replace(/no puedo[^.]*?(renderiz|gener|dibuj|crear|mostrar)[^.]*?\.\s*/ig,'')
+    .replace(/\(soy (solo )?(una ia de )?texto\)/ig,'')
+    .replace(/,?\s*pero te la monto[^.]*?\.\s*/ig,'')
+    .replace(/```(?!chart|calc|escenario)[a-z]*\s*[\s\S]*?```/gi,'')   // tablas/código en fences normales (la web ya dibuja la gráfica)
+    .replace(/^.*\bascii\b.*$/gim,'')                                   // cualquier línea que mencione ASCII
+    .replace(/\[\s*gr[aá]fica\s*\]/gi,'')
+    .replace(/\n{3,}/g,'\n\n').trim();
+}
 async function ask(text){
   text=(text||'').trim();if(!text||sending)return;   // evita doble envío
   sending=true;$('csend').disabled=true;
@@ -1034,13 +1070,22 @@ async function ask(text){
       return;
     }
     // 2) cerebro Claude CON el hilo de la conversación y los números reales
+    const hw=chartHorizonWeeks(text);
+    const solo=hw>0 && /solo el precio|ni bajista ni alcista|sin banda|solo (la )?l[ií]nea|solo lo que estim|solo central/.test(text.toLowerCase());
+    // Si piden gráfica, avisamos al modelo de que la WEB la dibuja -> que NO la intente, solo analice
+    const chartNote=hw>0 ? '\n\n== IMPORTANTE SOLO PARA ESTA RESPUESTA ==\nEl usuario pide una GRÁFICA/recorrido del precio. La propia WEB la dibuja AUTOMÁTICAMENTE con los datos reales, encima de tu texto. Por eso TÚ NO debes: generar ninguna gráfica, NI una tabla de precios semana a semana, NI barras ASCII, NI un bloque chart, NI decir "no puedo dibujar" o "soy texto". Da SOLO el análisis en palabras: el recorrido semana a semana y su porqué, el matiz de precisión (la 1ª semana es predicción fina del modelo; de la 2ª en adelante es proyección estacional con banda que se abre), y qué vigilar. Empieza directo por el análisis, sin presentar ninguna tabla.' : '';
     let ansText=null;
     try{
-      const resp=await fetch(WORKER,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({mensajes:CHATLOG.slice(-8),usuario:chatUser(),estado:buildEstado(),extra:EXTRA_INSTR,modelo:'sonnet'})});
+      const resp=await fetch(WORKER,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({mensajes:CHATLOG.slice(-8),usuario:chatUser(),estado:buildEstado(),extra:EXTRA_INSTR+chartNote,modelo:'sonnet'})});
       const data=await resp.json();
       if(data&&data.respuesta)ansText=data.respuesta;
     }catch(e){}
-    if(ansText){setChatStatus('● IA Claude · datos de hoy');t.remove();await typeBotRich(ansText);pushLog('assistant',cleanForLog(ansText));}
+    if(ansText){
+      if(hw>0){
+        const cb=trajChartBlock(hw,solo);
+        if(cb) ansText=cb+'\n\n'+stripModelChartExcuse(ansText);   // la WEB dibuja la gráfica real; el modelo solo pone el análisis
+      }
+      setChatStatus('● IA Claude · datos de hoy');t.remove();await typeBotRich(ansText);pushLog('assistant',cleanForLog(ansText));}
     else{let fb;try{fb=await route(text);}catch(e){fb='Uf, ahora mismo no puedo conectar con la IA 🤔. Prueba otra vez en un momento.';}t.remove();addBub(fb,'bot');pushLog('assistant',stripTags(fb));}
   }finally{sending=false;$('csend').disabled=false;}
 }
