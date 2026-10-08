@@ -1076,9 +1076,12 @@ async function ask(text){
     }
     // 2) cerebro Claude CON el hilo de la conversación y los números reales
     const hw=chartHorizonWeeks(text);
-    const solo=hw>0 && /solo el precio|ni bajista ni alcista|sin banda|solo (la )?l[ií]nea|solo lo que estim|solo central/.test(text.toLowerCase());
+    // Por DEFECTO la gráfica muestra SOLO la línea del precio estimado (clavado). Las bandas alta/baja
+    // solo si el usuario las pide expresamente.
+    const showBands=/\bbandas?\b|rango|incertidumbre|optimista|pesimista|mejor y peor|m[aá]x.{0,6}m[ií]n|horquilla|escenarios?|margen de error/i.test(text);
+    const solo=!showBands;
     // Si piden gráfica, avisamos al modelo de que la WEB la dibuja -> que NO la intente, solo analice
-    const chartNote=hw>0 ? '\n\n== IMPORTANTE SOLO PARA ESTA RESPUESTA ==\nEl usuario pide una GRÁFICA/recorrido del precio. La propia WEB la dibuja AUTOMÁTICAMENTE con los datos reales, encima de tu texto. Por eso TÚ NO debes: generar ninguna gráfica, NI una tabla de precios semana a semana, NI barras ASCII, NI un bloque chart, NI decir "no puedo dibujar" o "soy texto". Da SOLO el análisis en palabras: el recorrido semana a semana y su porqué, el matiz de precisión (la 1ª semana es predicción fina del modelo; de la 2ª en adelante es proyección estacional con banda que se abre), y qué vigilar. Empieza directo por el análisis, sin presentar ninguna tabla.' : '';
+    const chartNote=hw>0 ? ('\n\n== IMPORTANTE SOLO PARA ESTA RESPUESTA ==\nEl usuario pide una GRÁFICA/recorrido del precio. La propia WEB la dibuja AUTOMÁTICAMENTE con los datos reales, encima de tu texto, mostrando '+(showBands?'el precio estimado con su banda alta/baja':'SOLO la línea del precio estimado semana a semana (sin bandas)')+'. Por eso TÚ NO debes: generar ninguna gráfica, NI una tabla de precios, NI barras ASCII, NI un bloque chart, NI decir "no puedo dibujar" o "soy texto". Da SOLO el análisis en palabras: el recorrido semana a semana y su porqué, el matiz de precisión (la 1ª semana es predicción fina; de la 2ª en adelante es proyección estacional, menos precisa cuanto más lejos)'+(showBands?'':', pero NO hables de bandas ni rangos salvo que te los pidan')+', y qué vigilar. Empieza directo por el análisis, sin presentar ninguna tabla.') : '';
     let ansText=null;
     try{
       const resp=await fetch(WORKER,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({mensajes:CHATLOG.slice(-8),usuario:chatUser(),estado:buildEstado(),extra:EXTRA_INSTR+chartNote,modelo:'sonnet'})});
