@@ -316,7 +316,7 @@ footer a{color:var(--accent);cursor:pointer}
   <!-- MEDIO PLAZO (predicción congelada) -->
   <section class="rise" id="mp-sec">
     <h2>Recorrido a medio plazo (6 meses)</h2>
-    <p class="slab">La trayectoria semana a semana que estima el modelo. Se <b>congela</b> cada semana y se guarda para siempre, para medir con honestidad su acierto cuando pase el tiempo. A más distancia, más se abre la banda.</p>
+    <p class="slab">Trayectoria <b>estacional</b> (patrón de 17 años anclado al precio de hoy). <b>Es planificación, NO predicción fina:</b> marca la FORMA (baja en enero, sube en primavera), no el número exacto. ⚠️ Aún <b>no incorpora la situación REAL del mercado</b> (sobreoferta europea, exportación cerrada, censo), así que la recuperación que dibuja puede ser <b>demasiado optimista</b> para este ciclo deprimido. Se <b>congela</b> cada semana para medir su acierto con el tiempo. A más distancia, más se abre la banda.</p>
     <div id="mp-chart"></div>
     <p class="slab" id="mp-note" style="margin-top:6px"></p>
     <div id="mp-eval"></div>
@@ -843,7 +843,7 @@ Luego responde directo y útil, sin soltar todo el razonamiento interno. Si dete
 
 5b) CONTEXTO DE MERCADO EN VIVO (ESTADO.contexto_mercado): son datos REALES y FRESCOS que llegan cada semana de los informes de Daniel. ÚSALOS cuando vengan a cuento, no los ignores:
    - contexto_mercado.europa.datos → precios de porcino de TODA Europa (italia, paises_bajos, belgica, portugal, reino_unido, polonia), además de Francia/Alemania/Dinamarca que ya tienes en 'vecinos'. Sirven para situar España en el mapa europeo (¿caro o barato vs vecinos?).
-   - contexto_mercado.ppa → estado de la Peste Porcina Africana en España. Si 'sin_positivos_domestico' y 'sin_cambios_comercio_exterior' son true, significa que NO hay nuevos vetos de exportación (China/Japón no cierran por esto ahora) — dato clave para la demanda. Usa su 'resumen'.
+   - contexto_mercado.ppa → estado de la Peste Porcina Africana. Campos: 'casos_nuevos_jabali' (casos nuevos esta semana), 'acumulados_positivos', 'sin_positivos_domestico' (si true, la PPA sigue SOLO en jabalí, no en granjas → la tesis de reapertura de exportación sigue viva), 'apertura_comercial' (si true, esta semana hubo una NUEVA apertura/acuerdo de exportación). Y contexto_mercado.ppa_historico → la SERIE semana a semana de casos (tendencia). ESTA ES LA VARIABLE Nº1 A VIGILAR: mientras siga solo en jabalí y bajando, bien; si salta a cerdo DOMÉSTICO, es catastrófico (precio podría caer por debajo de 1€). Usa 'resumen' y, si preguntan por la PPA/exportación/Japón/China, da los casos nuevos y la tendencia del histórico.
    - contexto_mercado.lechon_nacional_20kg → precio del lechón (cría). Es un indicador ADELANTADO del ciclo (lo que se paga por lechones hoy influye en la oferta de cerdos dentro de ~4-5 meses).
    Cita estos datos con su fecha si la pregunta va de Europa, PPA/sanidad/exportación, China, demanda o el ciclo. Si contexto_mercado es null, di que ese dato aún no ha entrado.
 

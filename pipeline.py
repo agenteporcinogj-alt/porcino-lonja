@@ -160,9 +160,21 @@ def ctx_ppa(t):
     nn=''.join(c for c in unicodedata.normalize('NFD',norm) if unicodedata.category(c)!='Mn')
     dom='sin positivos en porcino domestico' in nn
     com='sin cambios en el comercio exterior' in nn
+    # Señales numéricas (la variable nº1 a vigilar: casos nuevos + ¿salta a doméstico? + aperturas de exportación)
+    mN=re.search(r'N[ºo]\s*(\d{1,3})', t)
+    sem=int(mN.group(1)) if mN else None
+    mNew=re.search(r'(\d+)\s+NUEVOS', t)
+    nuevos=int(mNew.group(1)) if mNew else None
+    mAc=re.search(r'(\d{2,4})\s+[\d.]+\s+\d+\s+NUEVO', t)
+    acum=int(mAc.group(1)) if mAc else None
+    apertura=bool(re.search(r'autoriza|reabre|reapertura|nuevo acuerdo', t, re.I))
+    resumen=('Solo focos en jabalíes, SIN positivos en cerdo doméstico y sin nuevos vetos (China/Japón no cierran por esto de momento)'
+             if (dom and com) else 'Situación PPA con posibles cambios — revisar, puede afectar a vetos de exportación')
+    if nuevos is not None: resumen=f'{nuevos} casos nuevos esta semana (solo jabalí). '+resumen
+    if apertura: resumen+=' · OJO: esta semana hay una NUEVA apertura/acuerdo de exportación'
     return {'sin_positivos_domestico':dom,'sin_cambios_comercio_exterior':com,
-            'resumen':('Solo focos en jabalíes, sin positivos en cerdo doméstico y SIN cambios en exportación (China/Japón no vetan por esto de momento)'
-                       if (dom and com) else 'Situación PPA con posibles cambios — revisar, podría afectar a bloqueos de exportación')}
+            'semana_informe':sem,'casos_nuevos_jabali':nuevos,'acumulados_positivos':acum,
+            'apertura_comercial':apertura,'resumen':resumen}
 def ctx_lechon(t):
     m=re.search(r'Precio Base 20 ?kg\s+[\d,]+\s+([\d,]+)',t)
     try: return tf(m.group(1)) if m else None
@@ -183,7 +195,13 @@ def paso_contexto():
         ppaf=_latest_pdf('*PPA*.pdf')
         if ppaf:
             pp=ctx_ppa(_pdftxt(ppaf))
-            if pp: ctx['ppa']={**pp,'fecha':hoy}
+            if pp:
+                ctx['ppa']={**pp,'fecha':hoy}
+                hist=ctx.get('ppa_historico',[]); sem=pp.get('semana_informe')
+                if sem is not None and not any(h.get('semana')==sem for h in hist):
+                    hist.append({'semana':sem,'fecha':hoy,'casos_nuevos':pp.get('casos_nuevos_jabali'),
+                                 'acumulados':pp.get('acumulados_positivos'),'domestico':(0 if pp.get('sin_positivos_domestico') else 1)})
+                    ctx['ppa_historico']=sorted(hist,key=lambda h:h.get('semana') or 0)[-60:]
         lef=_latest_pdf('LE*.pdf')
         if lef:
             le=ctx_lechon(_pdftxt(lef))
