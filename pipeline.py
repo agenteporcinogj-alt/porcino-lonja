@@ -20,6 +20,9 @@ ENC_OUT=os.path.join(HERE,'docs','data.enc.js')
 # --- Versionado del modelo (lo que la reunion llama "V1"). Cada cambio de variables = nueva version ---
 MODEL_VERSION='v1'
 MODEL_FEATURES='inercia España 3 semanas + delta Francia + delta Alemania + estacionalidad'
+# Banda CALIBRADA con el backtest real (P80 del error absoluto por horizonte, semi-ancho en €).
+# "El 80% de las veces el precio real cayó dentro de ±este valor". Mucho más honesta que una fórmula inventada.
+BANDA_CAL=[0.0,0.019,0.037,0.05,0.069,0.084,0.097,0.111,0.123,0.136,0.151,0.163,0.175,0.186,0.199,0.209,0.221,0.228,0.235,0.247,0.259,0.272,0.276,0.29,0.297,0.308,0.314]
 NUM=re.compile(r'-?\d+,\d+')
 def tf(s): return float(s.replace('.','').replace(',','.'))
 def nbe(l): return [tf(x) for x in NUM.findall(re.split(r'€',l)[0])]
@@ -363,7 +366,7 @@ def paso_congelar(m):
         fw=((pw-1+i)%52)+1; fy=py+((pw-1+i)//52)
         sf=seas.get(str(fw)) or sref
         central=round(pv*(sf/sref),3)
-        semi=(1.2+1.4*(i**0.5))/100.0   # horquilla que se ABRE con el horizonte
+        semi=BANDA_CAL[i] if i<len(BANDA_CAL) else BANDA_CAL[-1]   # banda CALIBRADA con el backtest real (P80)
         traj.append({'y':fy,'w':fw,'h':i,'central':central,'lo':round(central-semi,3),'hi':round(central+semi,3)})
     rec={'forecast_id':f'{py}-W{pw:02d}-{MODEL_VERSION}','issued_at':hoy.isoformat(),
          'model_version':MODEL_VERSION,'model_features':MODEL_FEATURES,
