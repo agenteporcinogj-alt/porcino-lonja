@@ -313,6 +313,15 @@ footer a{color:var(--accent);cursor:pointer}
     <div class="chartcard"><div id="chart"></div></div>
   </section>
 
+  <!-- MEDIO PLAZO (predicción congelada) -->
+  <section class="rise" id="mp-sec">
+    <h2>Recorrido a medio plazo (6 meses)</h2>
+    <p class="slab">La trayectoria semana a semana que estima el modelo. Se <b>congela</b> cada semana y se guarda para siempre, para medir con honestidad su acierto cuando pase el tiempo. A más distancia, más se abre la banda.</p>
+    <div id="mp-chart"></div>
+    <p class="slab" id="mp-note" style="margin-top:6px"></p>
+    <div id="mp-eval"></div>
+  </section>
+
   <!-- ESCENARIOS -->
   <section class="rise">
     <h2>Escenarios</h2>
@@ -403,8 +412,32 @@ function render(d){
       $('fiab-sub').innerHTML='error medio en <b>17 años de simulación</b> (acierta ≤2 cts el '+d.precision.within2+'%) · <b>aún sin validar en vivo</b>';
     }
   })();
-  renderWhy(d);renderEsc(d);renderEvt(d);renderHist(d);renderDemanda();drawChart(d.serie);drawComov(d.serie_paises);
+  renderWhy(d);renderEsc(d);renderEvt(d);renderHist(d);renderDemanda();renderMedioPlazo(d);drawChart(d.serie);drawComov(d.serie_paises);
   initChat();
+}
+function renderMedioPlazo(d){
+  const mp=d.medio_plazo; const sec=$('mp-sec'); if(!sec)return;
+  if(!mp||!mp.actual){sec.style.display='none';return;}
+  const t=mp.actual.trayectoria||[];
+  const labels=t.map(p=>'s'+p.w+'/'+String(p.y).slice(2));
+  const spec={type:'line',title:'',labels,series:[
+    {name:'Precio estimado',data:t.map(p=>p.central)},
+    {name:'Banda alta',data:t.map(p=>p.hi)},
+    {name:'Banda baja',data:t.map(p=>p.lo)}
+  ]};
+  const box=$('mp-chart'); box.className='chatchart'; box.innerHTML=chatChart(spec); wireChatChart(box,spec);
+  $('mp-note').innerHTML='Congelada el <b>'+(mp.actual.issued_at||'—')+'</b> (modelo <b>'+(mp.version||'v1')+'</b>). Guardadas <b>'+(mp.n_congeladas||0)+'</b> predicción(es) para evaluar cuando pase el tiempo.';
+  const ev=mp.eval||[];
+  if(ev.length){
+    const TD='style="padding:3px 8px;border-bottom:1px solid var(--line)"';
+    let h='<h3 style="margin:10px 0 4px">Precisión real a medio plazo</h3><table style="border-collapse:collapse;width:100%;font-size:13px"><thead><tr>'
+      +['Horizonte','Error medio','Dentro de banda','Semanas'].map(c=>'<th '+TD+';text-align:left;color:var(--muted)">'+c+'</th>').join('')+'</tr></thead><tbody>';
+    ev.forEach(r=>{h+='<tr><td '+TD+'>'+(r.horizonte_sem===0?'esta semana':r.horizonte_sem+' sem')+'</td><td '+TD+'><b>'+fmt(r.mae_cts,1)+' cts</b></td><td '+TD+'>'+r.cobertura_pct+'%</td><td '+TD+'>'+r.n+'</td></tr>';});
+    h+='</tbody></table>';
+    $('mp-eval').innerHTML=h;
+  }else{
+    $('mp-eval').innerHTML='<p class="slab" style="opacity:.85;margin-top:8px">⏳ La evaluación a 1 / 4 / 6 meses se rellenará <b>sola</b> a medida que lleguen los precios reales de esas semanas. Hoy empieza a contar.</p>';
+  }
 }
 function animateNum(el,target,dec){dec=dec||2;let cur=0;const t0=performance.now();
   function step(t){const p=Math.min((t-t0)/700,1);el.textContent=fmt(cur+(target-cur)*(1-(1-p)*(1-p)),dec);if(p<1)requestAnimationFrame(step);else el.textContent=fmt(target,dec);}

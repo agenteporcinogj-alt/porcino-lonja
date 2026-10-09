@@ -25,7 +25,7 @@ jobs:
           git config user.name "porcino-bot"
           git config user.email "bot@users.noreply.github.com"
           # Solo commiteamos los DATOS regenerados. Nunca tocamos codigo/workflow.
-          FILES="data/master.xlsx data/validacion_modelo.csv docs/data.enc.js data/correos_vistos.txt data/contexto_mercado.json"
+          FILES="data/master.xlsx data/validacion_modelo.csv docs/data.enc.js data/correos_vistos.txt data/contexto_mercado.json data/predicciones_congeladas.jsonl"
           mkdir -p /tmp/gen
           for f in $FILES; do [ -f "$f" ] && cp "$f" "/tmp/gen/$(echo $f | tr / _)" || true; done
           for i in 1 2 3 4 5 6; do

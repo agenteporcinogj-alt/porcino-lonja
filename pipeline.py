@@ -15,7 +15,11 @@ MASTER=os.path.join(HERE,'data','master.xlsx')
 LOG=os.path.join(HERE,'data','validacion_modelo.csv')
 VISTOS=os.path.join(HERE,'data','correos_vistos.txt')  # Message-IDs ya procesados (persiste en el repo -> no re-descargar correos = no OVERQUOTA)
 CTX_FILE=os.path.join(HERE,'data','contexto_mercado.json')  # contexto rico persistido (Europa/PPA/lechon) para el bot
+CONG_FILE=os.path.join(HERE,'data','predicciones_congeladas.jsonl')  # registro INMUTABLE de trayectorias a medio plazo (para evaluar a 1/4/6 meses)
 ENC_OUT=os.path.join(HERE,'docs','data.enc.js')
+# --- Versionado del modelo (lo que la reunion llama "V1"). Cada cambio de variables = nueva version ---
+MODEL_VERSION='v1'
+MODEL_FEATURES='inercia España 3 semanas + delta Francia + delta Alemania + estacionalidad'
 NUM=re.compile(r'-?\d+,\d+')
 def tf(s): return float(s.replace('.','').replace(',','.'))
 def nbe(l): return [tf(x) for x in NUM.findall(re.split(r'€',l)[0])]
@@ -315,6 +319,70 @@ def paso_registro(m):
         for k in sorted(L): w.writerow(L[k])
     return [L[k] for k in sorted(L)]
 
+# ---------- 4b) CONGELAR TRAYECTORIA A MEDIO PLAZO (registro inmutable) ----------
+def paso_congelar(m):
+    # Guarda, UNA SOLA VEZ por semana objetivo y solo si es una prediccion A CIEGAS (emitida antes de que
+    # empiece esa semana), la trayectoria completa a 26 semanas con horquilla. NUNCA se reescribe.
+    # Esto es lo que permitira medir la precision a 1/4/6 meses cuando pase el tiempo (peticion de Francisco/Daniel).
+    py,pw=m['nexty'],m['nextw']
+    try:
+        lunes=datetime.date.fromisocalendar(py,pw,1)
+    except Exception:
+        return
+    hoy=datetime.date.today()
+    if hoy>=lunes:  # la semana objetivo ya empezo/paso -> NO es prediccion a ciegas, no congelar
+        return
+    existentes=set()
+    if os.path.exists(CONG_FILE):
+        for line in open(CONG_FILE):
+            try: r=json.loads(line); existentes.add((r['target_y'],r['target_w'],r.get('model_version')))
+            except Exception: pass
+    if (py,pw,MODEL_VERSION) in existentes:  # ya congelada esta semana con esta version
+        return
+    pv=m['pred']; seas=m['seas']; sref=seas.get(str(pw)) or 100.0
+    traj=[]
+    for i in range(26):
+        fw=((pw-1+i)%52)+1; fy=py+((pw-1+i)//52)
+        sf=seas.get(str(fw)) or sref
+        central=round(pv*(sf/sref),3)
+        semi=(1.2+1.4*(i**0.5))/100.0   # horquilla que se ABRE con el horizonte
+        traj.append({'y':fy,'w':fw,'h':i,'central':central,'lo':round(central-semi,3),'hi':round(central+semi,3)})
+    rec={'forecast_id':f'{py}-W{pw:02d}-{MODEL_VERSION}','issued_at':hoy.isoformat(),
+         'model_version':MODEL_VERSION,'model_features':MODEL_FEATURES,
+         'target_y':py,'target_w':pw,'ultimo_real':m['last'],'trayectoria':traj}
+    try:
+        with open(CONG_FILE,'a') as f: f.write(json.dumps(rec,ensure_ascii=False)+'\n')
+        print(f'  Prediccion CONGELADA: {rec["forecast_id"]} ({len(traj)} semanas, horizonte ~6 meses)')
+    except Exception as e:
+        print('  (no se pudo congelar:',e,')')
+
+def cargar_congeladas():
+    out=[]
+    if os.path.exists(CONG_FILE):
+        for line in open(CONG_FILE):
+            try: out.append(json.loads(line))
+            except Exception: pass
+    return out
+def eval_horizontes(congeladas, esp):
+    # Compara cada punto de cada trayectoria CONGELADA con el precio real (cuando ya existe), por horizonte.
+    # Mide la precision REAL a medio plazo de forma honesta (acumula con el tiempo). esp: dict (y,w)->precio.
+    por_h={}
+    for rec in congeladas:
+        ver=rec.get('model_version','?')
+        for pt in rec.get('trayectoria',[]):
+            real=esp.get((pt['y'],pt['w']))
+            if real is None or pt.get('h') is None: continue
+            k=(ver,pt['h'])
+            por_h.setdefault(k,{'err':[],'dentro':0,'n':0})
+            e=abs(pt['central']-real); por_h[k]['err'].append(e); por_h[k]['n']+=1
+            if pt['lo']-1e-9<=real<=pt['hi']+1e-9: por_h[k]['dentro']+=1
+    out=[]
+    for (ver,h),d in sorted(por_h.items()):
+        out.append({'version':ver,'horizonte_sem':h,'n':d['n'],
+                    'mae_cts':round(sum(d['err'])/len(d['err'])*100,1),
+                    'cobertura_pct':round(d['dentro']/d['n']*100)})
+    return out
+
 # ---------- 5) CIFRAR PARA LA WEB ----------
 def cifrar(plaintext,password):
     salt=os.urandom(16)
@@ -348,6 +416,7 @@ def paso_web(m,historial,diario=None,contexto=None):
              'serie':m['serie'],'serie_paises':m['serie_paises'],'contrib':m['contrib'],'vecinos':m['vecinos'],
              'seas':m['seas'],'semaforo':sem,'escenarios':escenarios,'eventos':eventos,
              'contexto_mercado':(contexto or {}),
+             'medio_plazo':(lambda c: ({'actual':c[-1],'eval':eval_horizontes(c,m['esp']),'version':MODEL_VERSION,'n_congeladas':len(c)}) if c else {'actual':None,'eval':[],'version':MODEL_VERSION,'n_congeladas':0})(cargar_congeladas()),
              'diario':(diario or {})}
     pw=os.environ.get('WEB_PASSWORD','cerdo')
     enc=cifrar(json.dumps(payload,ensure_ascii=False),pw)
@@ -359,7 +428,8 @@ if __name__=='__main__':
     print('== 2) Maestro =='); mae=paso_maestro() or {}
     print('== 3) Modelo =='); m=paso_modelo()
     print('== 4) Registro =='); h=paso_registro(m)
-    print('== 4b) Contexto =='); ctx=paso_contexto()
+    print('== 4b) Congelar medio plazo =='); paso_congelar(m)
+    print('== 4c) Contexto =='); ctx=paso_contexto()
     diario={'ts':datetime.datetime.now().strftime('%d/%m/%Y %H:%M'),
             'pdfs_nuevos':cor[0],'nombres':cor[1][:8],
             'nuevas':mae.get('nuevas',[]),'lat':mae.get('lat',{})}
