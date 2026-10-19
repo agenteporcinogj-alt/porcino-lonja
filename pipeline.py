@@ -210,7 +210,7 @@ def actualizar_series():
     # y los fusiona en SERIES_FILE. Asi cada dia el sistema aprende lo nuevo sin perder lo viejo.
     series=cargar_series()
     series.setdefault('semanal',{}); series.setdefault('mensual',{}); series.setdefault('narrativo',{})
-    PAGES={'aleman':1,'precios_eu':1,'lechon':2,'despiece':2,'matanza':2,'consumo':2,
+    PAGES={'aleman':1,'precios_eu':1,'lechon':2,'despiece':2,'matanza':2,'consumo':2,'cereales':20,
            'censo':1,'china_import':1,'exportacion':1,'usda':1,'fao':1,'importacion':1,'china_produccion':1}
     nuevos=0
     for f in sorted(glob.glob(os.path.join(PDFS,'*.pdf'))):
@@ -228,6 +228,13 @@ def actualizar_series():
             if not iso: continue
             key=f"{iso['y']}-W{iso['w']:02d}"; d=series['semanal'].setdefault(fam,{})
             if key not in d or iso['fecha']>=d[key].get('fecha',''): d[key]={**r,'fecha':iso['fecha']}; nuevos+=1
+        elif fam=='cereales':
+            # el Boletín NO lleva fecha en el nombre -> la semana/año vienen del contenido
+            if not r.get('anio') or not r.get('semana'): continue
+            try: fch=datetime.date.fromisocalendar(r['anio'],r['semana'],1).isoformat()
+            except Exception: fch=''
+            key=f"{r['anio']}-W{r['semana']:02d}"; d=series['semanal'].setdefault('cereales',{})
+            if key not in d: d[key]={**{k:v for k,v in r.items() if k not in ('anio','semana')},'fecha':fch}; nuevos+=1
         elif fam in ('matanza','consumo'):
             tgt=series['mensual'].setdefault(fam,{'anos':[],'series':{}})
             for ano in r.get('anos',[]):
@@ -283,6 +290,10 @@ def construir_contexto_rico(series, ppa_ctx=None, ppa_hist=None):
     # Mercado aleman (AMI canal + matanza)
     al=_ult_semanal(sw.get('aleman',{}))
     if al: ctx['aleman']={**al,'tendencia_ponderado':_mini_trend(sw['aleman'],'ponderado')}
+    # Cereales y piensos (€/t) -> coste de producir el cerdo. maiz y soja son los que mas pesan.
+    ce=_ult_semanal(sw.get('cereales',{}))
+    if ce: ctx['cereales']={**ce,'tendencia_maiz':_mini_trend(sw['cereales'],'maiz'),
+                            'tendencia_soja':_mini_trend(sw['cereales'],'harina_soja')}
     # Peso de la canal en Espana (matanza, mensual) -> lo que pidio Francisco
     mz=sm.get('matanza',{}).get('series',{})
     if mz:

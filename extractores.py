@@ -123,6 +123,27 @@ def ex_aleman(t):
         if ns: out['cerdos_sacrificados'] = ns[-1]  # ultima columna CON dato (si la mas reciente es "--", _nums ya la omitio)
     return out or None
 
+# ============ SEMANAL: CEREALES Y PIENSOS (Boletín Mercolleida, pág. "CEREALES Y PIENSOS") ============
+def ex_cereales(t):
+    """Precios €/tonelada de los insumos del pienso (coste de producción del cerdo). Coge el precio
+    ACTUAL (2ª columna de la fila 'Disponible'). La semana/año salen del CONTENIDO (el boletín no la
+    lleva en el nombre de fichero)."""
+    out = {}
+    pats = {'trigo_forrajero': r'Trigo forrajero nacional Disponible[^\n]*?(\d+,\d{2})\s+(\d+,\d{2})',
+            'cebada':          r'Cebada PE 62 nacional Disponible[^\n]*?(\d+,\d{2})\s+(\d+,\d{2})',
+            'maiz':            r'Ma[ií]z nacional Disponible[^\n]*?(\d+,\d{2})\s+(\d+,\d{2})',
+            'harina_soja':     r'Harina soja importaci[oó]n 47%[^\n]*?(\d+,\d{2})\s+(\d+,\d{2})',
+            'colza':           r'Colza en grano[^\n]*?(\d+,\d{2})\s+(\d+,\d{2})'}
+    for k, pat in pats.items():
+        m = re.search(pat, t)
+        if m:
+            try: out[k] = tf(m.group(2))
+            except Exception: pass
+    ms = re.search(r'SEMANA\s+(\d{1,2})\s*/\s*(\d{4})', t)
+    if ms:
+        out['semana'] = int(ms.group(1)); out['anio'] = int(ms.group(2))
+    return out or None
+
 # ============ MENSUAL: MATANZA ESPAÑA (peso canal + sacrificios) ============
 def ex_matanza(t):
     """Tabla mensual: miles de cabezas | toneladas | peso medio canal, columnas por año.
@@ -216,12 +237,13 @@ def familia(fn):
     if base.startswith('previsiones fao') or 'fao-ocde' in base or 'fao para' in base: return 'fao'
     if 'balance importacion' in base: return 'importacion'
     if 'produccion porcina china' in base: return 'china_produccion'
-    if base.startswith('bolet'): return 'boletin'
+    if base.startswith('bolet'): return 'cereales'   # del Boletín sacamos los precios de cereales/piensos
     if 'ppa' in base: return 'ppa'
     return None
 
 EXTRACTOR = {
     'lechon': ex_lechon, 'despiece': ex_despiece, 'aleman': ex_aleman, 'precios_eu': ex_precios_eu,
+    'cereales': ex_cereales,
     'matanza': ex_matanza, 'consumo': ex_consumo,
     'censo': ex_narrativo, 'china_import': ex_narrativo, 'exportacion': ex_narrativo,
     'usda': ex_narrativo, 'fao': ex_narrativo, 'importacion': ex_narrativo,
