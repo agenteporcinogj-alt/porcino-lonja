@@ -46,20 +46,20 @@ def ex_precios_eu(t):
     """Precios de porcino de toda Europa. Combina la linea-resumen (vivo) con las cotizaciones por pais."""
     out = {}
     # Linea resumen: "España 1,32 - Alemania 1,13 - Francia 1,57 - Paises Bajos 1,06 - Dinamarca 0,83 - Bélgica 1,14"
-    m = re.search(r'Espa.a\s+(\d,\d{2}).{0,80}?Alemania\s+(\d,\d{2}).{0,80}?Francia\s+(\d,\d{2})', t, re.S)
+    m = re.search(r'Espa.a\s+(\d,\d{2,3}).{0,80}?Alemania\s+(\d,\d{2,3}).{0,80}?Francia\s+(\d,\d{2,3})', t, re.S)
     if m:
         out['vivo_ue'] = {'espana': tf(m.group(1)), 'alemania': tf(m.group(2)), 'francia': tf(m.group(3))}
-        for pais, pat in [('paises_bajos', r'Pa.ses Bajos\s+(\d,\d{2})'),
-                          ('dinamarca', r'Dinamarca\s+(\d,\d{2})'),
-                          ('belgica', r'B.lgica\s+(\d,\d{2})')]:
+        for pais, pat in [('paises_bajos', r'Pa.ses Bajos\s+(\d,\d{2,3})'),
+                          ('dinamarca', r'Dinamarca\s+(\d,\d{2,3})'),
+                          ('belgica', r'B.lgica\s+(\d,\d{2,3})')]:
             mm = re.search(pat, t)
             if mm: out['vivo_ue'][pais.replace('_bajos', '_bajos')] = tf(mm.group(1))
     # Cotizaciones por pais (bases distintas; las guardamos con su referencia)
     porpais = {}
-    for k, pat in [('italia_vivo_dop', r'CUN[^\n]*?Vivo[^\n]*?(\d,\d{3})'),
-                   ('paises_bajos_canal', r'Vion[^\n]*?Canal[^\n]*?(\d,\d{2})'),
-                   ('portugal_canal', r'Montijo[^\n]*?Canal[^\n]*?(\d,\d{3})'),
-                   ('reino_unido_canal', r'SPP[^\n]*?Canal[^\n]*?(\d,\d{2})')]:
+    for k, pat in [('italia_vivo_dop', r'CUN[^\n]*?Vivo[^\n]*?(\d,\d{2,3})'),
+                   ('paises_bajos_canal', r'Vion[^\n]*?Canal[^\n]*?(\d,\d{2,3})'),
+                   ('portugal_canal', r'Montijo[^\n]*?Canal[^\n]*?(\d,\d{2,3})'),
+                   ('reino_unido_canal', r'SPP[^\n]*?Canal[^\n]*?(\d,\d{2,3})')]:
         mm = re.search(pat, t, re.I)
         if mm:
             try: porpais[k] = tf(mm.group(1))

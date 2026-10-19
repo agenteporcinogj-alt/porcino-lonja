@@ -521,7 +521,8 @@ function renderDiario(d){
   rows+='<div class="drow"><span class="dk">🕐 Última pasada</span><span class="dv">'+(g.ts||'—')+'</span></div>';
   rows+='<div class="drow"><span class="dk">📥 PDFs nuevos leídos</span><span class="dv">'+(g.pdfs_nuevos!=null?g.pdfs_nuevos:'—')+'</span></div>';
   const nuevas=g.nuevas||[];
-  rows+='<div class="drow"><span class="dk">🆕 Semanas nuevas al modelo</span><span class="dv">'+(nuevas.length?('sem '+nuevas.join(', ')):'ninguna')+'</span></div>';
+  const nuevasTxt=nuevas.map(x=>Array.isArray(x)?x[1]:x).join(', ');  // nuevas pueden ser [año,semana] -> mostramos la semana
+  rows+='<div class="drow"><span class="dk">🆕 Semanas nuevas al modelo</span><span class="dv">'+(nuevas.length?('sem '+nuevasTxt):'ninguna')+'</span></div>';
   if(lat.sem!=null){
     const filas=[['🐷 Cerdo cebado (Lleida)',lat.cebado],['🇫🇷 Francia',lat.fra],['🇩🇪 Alemania',lat.ale]]
       .map(([n,v])=>[n,price(v)]).filter(([n,v])=>v);

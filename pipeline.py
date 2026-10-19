@@ -87,11 +87,24 @@ def isoweek(fn,pfx):
     except: return None
     return d.isocalendar()[:2]
 def index_files(pfx):
+    # Indexa por (año, semana) para TODOS los años (antes estaba clavado a 2026 -> el sistema
+    # dejaba de actualizarse el 1-ene-2027). Ahora es agnóstico al año.
     out={}
     for f in glob.glob(os.path.join(PDFS,pfx+'[0-9]*.pdf')):
         yw=isoweek(os.path.basename(f),pfx)
-        if yw and yw[0]==2026 and yw[1] not in out: out[yw[1]]=f
+        if yw and yw not in out: out[yw]=f
     return out
+# --- Mapeo año -> columna del maestro (CEBADO/ALEMANIA/DINAMARCA: 1 col/año desde 2010 en col 2;
+#     FRANCIA: 2 cols/año, el valor va en la segunda). Autoexamen: para 2026 dan 18 y 35, los de siempre. ---
+def _col_anual(y): return 2+(y-2010)           # CEBADO LLEIDA / ALEMANIA / DINAMARCA (valor)
+def _col_fra_hdr(y): return 2+2*(y-2010)       # FRANCIA (cabecera del año)
+def _col_fra_val(y): return 2+2*(y-2010)+1     # FRANCIA (valor)
+def _ensure_col(ws,col,header_row,year):
+    # Garantiza que exista la columna del año (crea la cabecera si falta). openpyxl amplía el ancho
+    # al escribir, así el 1-ene del año nuevo la columna se crea sola en vez de que todo deje de funcionar.
+    if ws.cell(header_row,col).value != year:
+        ws.cell(header_row,col).value=year
+    return col
 def esp_de_po(path):
     # Objetivo = precio REAL de la Lonja de Lleida ("Cerdo Blanco", valor de esta semana).
     try:
@@ -306,10 +319,17 @@ def paso_contexto():
     hoy=datetime.date.today().isoformat()
     ppa_ctx=prev.get('ppa'); ppa_hist=prev.get('ppa_historico',[])
     try:
-        ppaf=_latest_pdf('*PPA*.pdf')
-        if ppaf:
-            pp=ctx_ppa(_pdftxt(ppaf))
-            if pp:
+        # Elegir el informe PPA MÁS RECIENTE por nº de semana (no por orden alfabético del fichero,
+        # que elegía mal si convivían "Actualización PPA..." y "Resumen semanal PPA...").
+        mejor=None; mejor_sem=-1
+        for f in glob.glob(os.path.join(PDFS,'*PPA*.pdf')):
+            cand=ctx_ppa(_pdftxt(f))
+            if cand and (cand.get('semana_informe') or -1) > mejor_sem:
+                mejor=cand; mejor_sem=cand.get('semana_informe') or -1
+        if mejor is None:  # fallback: ningún informe traía nº de semana -> el último por nombre
+            lf=_latest_pdf('*PPA*.pdf'); mejor=ctx_ppa(_pdftxt(lf)) if lf else None
+        pp=mejor
+        if pp:
                 ppa_ctx={**pp,'fecha':hoy}
                 sem=pp.get('semana_informe')
                 if sem is not None and not any(h.get('semana')==sem for h in ppa_hist):
@@ -326,29 +346,40 @@ def paso_contexto():
 
 # ---------- 2) ACTUALIZAR MAESTRO ----------
 def paso_maestro():
-    po=index_files('PO'); de=index_files('DE'); ip=index_files('IP')
+    po=index_files('PO'); de=index_files('DE'); ip=index_files('IP')  # claves (año,semana)
     wb=openpyxl.load_workbook(MASTER)
     YEL=PatternFill('solid',fgColor='FFF2CC'); ORA=PatternFill('solid',fgColor='FCE4D6')
-    def g(sh,w,col): return wb[sh].cell(8+w,col).value
     nuevas=[]
-    for w in range(1,53):
-        r=8+w
-        if g('CEBADO LLEIDA',w,18) is None and w in po:
-            eq=esp_de_po(po[w])
-            if eq is not None: wb['CEBADO LLEIDA'].cell(r,18).value=eq; wb['CEBADO LLEIDA'].cell(r,18).fill=YEL; nuevas.append(w)
-        if w in de:
-            ale,fra=ale_fra_de_de(de[w])
-            if g('ALEMANIA',w,18) is None and ale is not None: wb['ALEMANIA'].cell(r,18).value=ale; wb['ALEMANIA'].cell(r,18).fill=YEL
-            if g('FRANCIA',w,35) is None and fra is not None: wb['FRANCIA'].cell(r,35).value=fra; wb['FRANCIA'].cell(r,35).fill=YEL
-        if g('DINAMARCA',w,18) is None and w in ip:
-            d=din_de_ip(ip[w])
-            if d is not None: wb['DINAMARCA'].cell(r,18).value=d; wb['DINAMARCA'].cell(r,18).fill=YEL
-    for sheet,col in [('ALEMANIA',18),('FRANCIA',35)]:
-        lw=max([w for w in range(1,53) if g(sheet,w,col) is not None] or [0])
-        for w in range(2,lw+1):
-            c=wb[sheet].cell(8+w,col)
-            if c.value is None and wb[sheet].cell(8+w-1,col).value is not None:
-                c.value=wb[sheet].cell(8+w-1,col).value; c.fill=ORA
+    anos_presentes=sorted({y for (y,w) in list(po)+list(de)+list(ip)})
+    # España (CEBADO LLEIDA) — semanas 1..53 (2026 es año ISO de 53 semanas)
+    for (y,w),path in sorted(po.items()):
+        col=_ensure_col(wb['CEBADO LLEIDA'],_col_anual(y),8,y); r=8+w
+        if wb['CEBADO LLEIDA'].cell(r,col).value is None:
+            eq=esp_de_po(path)
+            if eq is not None: wb['CEBADO LLEIDA'].cell(r,col).value=eq; wb['CEBADO LLEIDA'].cell(r,col).fill=YEL; nuevas.append((y,w))
+    # Alemania + Francia (del informe de despiece DE)
+    for (y,w),path in sorted(de.items()):
+        ale,fra=ale_fra_de_de(path); r=8+w
+        cA=_ensure_col(wb['ALEMANIA'],_col_anual(y),8,y)
+        cF=_col_fra_val(y); _ensure_col(wb['FRANCIA'],_col_fra_hdr(y),7,y)
+        if wb['ALEMANIA'].cell(r,cA).value is None and ale is not None: wb['ALEMANIA'].cell(r,cA).value=ale; wb['ALEMANIA'].cell(r,cA).fill=YEL
+        if wb['FRANCIA'].cell(r,cF).value is None and fra is not None: wb['FRANCIA'].cell(r,cF).value=fra; wb['FRANCIA'].cell(r,cF).fill=YEL
+    # Dinamarca (del Info-Porcino IP)
+    for (y,w),path in sorted(ip.items()):
+        cD=_ensure_col(wb['DINAMARCA'],_col_anual(y),8,y); r=8+w
+        if wb['DINAMARCA'].cell(r,cD).value is None:
+            d=din_de_ip(path)
+            if d is not None: wb['DINAMARCA'].cell(r,cD).value=d; wb['DINAMARCA'].cell(r,cD).fill=YEL
+    # Relleno hacia adelante de ALE/FRA (series con huecos) SOLO en los años presentes, semanas 1..53
+    for y in anos_presentes:
+        for sheet,col in [('ALEMANIA',_col_anual(y)),('FRANCIA',_col_fra_val(y))]:
+            weeks=[w for w in range(1,54) if wb[sheet].cell(8+w,col).value is not None]
+            if not weeks: continue
+            lw=max(weeks)
+            for w in range(2,lw+1):
+                c=wb[sheet].cell(8+w,col)
+                if c.value is None and wb[sheet].cell(8+w-1,col).value is not None:
+                    c.value=wb[sheet].cell(8+w-1,col).value; c.fill=ORA
     wb.save(MASTER)
     print(f'  Semanas España nuevas en maestro: {nuevas}')
     # resumen para el "diario del cartero" (semana más reciente leída)
@@ -358,7 +389,7 @@ def paso_maestro():
         lw=cand[-1] if cand else None
         if lw is not None:
             ale,fra=(ale_fra_de_de(de[lw]) if lw in de else (None,None))
-            lat={'sem':lw,'cebado':(cebado_de_de(de[lw]) if lw in de else None),
+            lat={'sem':lw[1],'anio':lw[0],'cebado':(cebado_de_de(de[lw]) if lw in de else None),
                  'fra':fra,'ale':ale,'din':(din_de_ip(ip[lw]) if lw in ip else None)}
     except Exception as e:
         lat={}
@@ -383,24 +414,33 @@ def fit(data):
             for j in range(k): ATA[i][j]+=d['x'][i]*d['x'][j]
     return solve(ATA,ATy)
 def paso_modelo():
-    wb=openpyxl.load_workbook(MASTER,data_only=True); years=list(range(2010,2027))
+    # Años dinámicos: de 2010 al año ACTUAL (antes clavado a 2026 -> se paraba en 2027).
+    wb=openpyxl.load_workbook(MASTER,data_only=True); years=list(range(2010,datetime.date.today().year+1))
     def cell(sh,w,col):
         v=wb[sh].cell(8+w,col).value; return v if isinstance(v,(int,float)) else None
     seq=[]
     for y in years:
         yi=years.index(y)
-        for w in range(1,53):
+        for w in range(1,54):  # 1..53: hay años ISO de 53 semanas (2015, 2020, 2026...)
             e=cell('CEBADO LLEIDA',w,2+yi)
             if e is None: continue
             seq.append({'y':y,'w':w,'e':e,'f':cell('FRANCIA',w,2+2*yi+1),'a':cell('ALEMANIA',w,2+yi),'d':cell('DINAMARCA',w,2+yi)})
     esp={(r['y'],r['w']):r['e'] for r in seq}; allmean=st.mean(esp.values())
-    seas={w: st.mean([esp[(y,w)] for y in years if (y,w) in esp])/allmean*100 for w in range(1,53)}
+    # seas robusto: una semana necesita >=5 años para una estimación estacional fiable. La semana 53
+    # solo tiene 2 años (2015, 2020, ambos de precios bajos) -> su media está SESGADA a la baja y
+    # predeciría una caída falsa a fin de diciembre. Esas semanas heredan la anterior (patrón vecino).
+    seas={}
+    for w in range(1,54):
+        vals=[esp[(y,w)] for y in years if (y,w) in esp]
+        if len(vals)>=5: seas[w]=st.mean(vals)/allmean*100
+    for w in range(1,54):
+        if w not in seas: seas[w]=seas.get(w-1) or seas.get(w+1) or 100.0
     rows=[]
     for t in range(4,len(seq)):
         c,p1,p2,p3,p4=seq[t],seq[t-1],seq[t-2],seq[t-3],seq[t-4]
         rows.append({'y':c['y'],'w':c['w'],'prev':p1['e'],'dESP':c['e']-p1['e'],'target':c['e'],
             'x':[1.0,p1['e']-p2['e'],p2['e']-p3['e'],p3['e']-p4['e'],(p1['f']-p2['f']) if p1['f'] and p2['f'] else 0.0,
-                 (p1['a']-p2['a']) if p1['a'] and p2['a'] else 0.0,(seas[c['w']]-seas[p1['w']])/100.0*allmean]})
+                 (p1['a']-p2['a']) if p1['a'] and p2['a'] else 0.0,(seas.get(c['w'],100.0)-seas.get(p1['w'],100.0))/100.0*allmean]})
     em=[];en=[];within=0;nb=0
     for d in rows:
         if d['y']<2019: continue
@@ -410,9 +450,12 @@ def paso_modelo():
         em.append(abs(pr-d['target'])); en.append(abs(d['prev']-d['target']))
         if abs(pr-d['target'])<=0.02: within+=1
         nb+=1
-    beta=fit(rows); last=seq[-1]; p1=seq[-2]; p2=seq[-3]; p3=seq[-4]; nextw=last['w']%52+1
+    beta=fit(rows); last=seq[-1]; p1=seq[-2]; p2=seq[-3]; p3=seq[-4]
+    # Semana siguiente por FECHA real (maneja 52->53->1 y el salto de año sin errores de %52)
+    _nd=datetime.date.fromisocalendar(last['y'],last['w'],1)+datetime.timedelta(days=7)
+    nexty,nextw=_nd.isocalendar()[:2]
     x=[1.0,last['e']-p1['e'],p1['e']-p2['e'],p2['e']-p3['e'],(last['f']-p1['f']) if last['f'] and p1['f'] else 0.0,
-       (last['a']-p1['a']) if last['a'] and p1['a'] else 0.0,(seas[nextw]-seas[last['w']])/100.0*allmean]
+       (last['a']-p1['a']) if last['a'] and p1['a'] else 0.0,(seas.get(nextw,100.0)-seas.get(last['w'],100.0))/100.0*allmean]
     pred=round(last['e']+sum(bi*xi for bi,xi in zip(beta,x)),3)
     contrib={'inercia':round((beta[1]*x[1]+beta[2]*x[2]+beta[3]*x[3])*100,1),'francia':round(beta[4]*x[4]*100,1),
              'alemania':round(beta[5]*x[5]*100,1),'estacional':round(beta[6]*x[6]*100,1)}
@@ -427,7 +470,7 @@ def paso_modelo():
                   'esp':idx(win,'e'),'fra':idx(win,'f'),'ale':idx(win,'a'),'din':idx(win,'d')}
     return {'mae_m':sum(em)/len(em),'mae_n':sum(en)/len(en),'within2':round(within/nb*100) if nb else 0,
             'last':{'y':last['y'],'w':last['w'],'v':round(last['e'],3)},
-            'nextw':nextw,'nexty':last['y'] if nextw>last['w'] else last['y']+1,'pred':pred,'esp':esp,'serie':serie,
+            'nextw':nextw,'nexty':nexty,'pred':pred,'esp':esp,'serie':serie,
             'delta_cts':round((pred-last['e'])*100,1),'contrib':contrib,'vecinos':vecinos,
             'seas':{str(w):round(seas[w],1) for w in seas},'serie_paises':serie_paises}
 
