@@ -64,6 +64,7 @@ def paso_correo():
             if not fn or not fn.lower().endswith('.pdf'): continue
             parts=decode_header(fn); nm=''
             for txt,enc in parts: nm+= txt.decode(enc or 'utf-8','ignore') if isinstance(txt,bytes) else txt
+            nm=''.join(c for c in __import__('unicodedata').normalize('NFD',nm) if __import__('unicodedata').category(c)!='Mn')  # á->a, ó->o (antes acento->'_' rompia el router)
             nm=re.sub(r'[^A-Za-z0-9._\- ]','_',nm).strip() or 'adj.pdf'
             path=os.path.join(PDFS,nm)
             if os.path.exists(path): continue

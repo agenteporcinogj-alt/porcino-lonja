@@ -231,12 +231,16 @@ def familia(fn):
     if 'matanza de cerdos' in base: return 'matanza'
     if base.startswith('consumo espa'): return 'consumo'
     if 'censo porcino' in base or 'censo de reproductoras' in base: return 'censo'
-    if 'avance importacion china' in base or 'importacion china' in base: return 'china_import'
-    if 'balance exportacion' in base or 'avance exportacion' in base: return 'exportacion'
+    # OJO: al descargar del correo, paso_correo sustituye los acentos por '_' (Producción->Producci_n),
+    # así que usamos RAÍCES sin acento ('importaci','exportaci','producci') que casan en los dos casos
+    # (archivo con acento Y adjunto del correo con '_'). Antes, los informes macro del correo diario
+    # (China/importación/exportación) no se clasificaban = no se ingerían.
+    if 'importaci' in base and 'china' in base: return 'china_import'
+    if 'exportaci' in base: return 'exportacion'
     if 'usda' in base: return 'usda'
     if base.startswith('previsiones fao') or 'fao-ocde' in base or 'fao para' in base: return 'fao'
-    if 'balance importacion' in base: return 'importacion'
-    if 'produccion porcina china' in base: return 'china_produccion'
+    if 'balance importaci' in base: return 'importacion'
+    if 'producci' in base and 'porcina' in base and 'china' in base: return 'china_produccion'
     if base.startswith('bolet'): return 'cereales'   # del Boletín sacamos los precios de cereales/piensos
     if 'ppa' in base: return 'ppa'
     return None
