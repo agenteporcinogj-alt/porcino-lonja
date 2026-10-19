@@ -120,7 +120,7 @@ def ex_aleman(t):
     mm = re.search(r'Número de cerdos sacrificados\s+([\d. ]+)', t)
     if mm:
         ns = _nums(mm.group(1))
-        if ns: out['cerdos_sacrificados'] = ns[-2] if len(ns) >= 2 and ns[-1] == ns[-1] else ns[-1]
+        if ns: out['cerdos_sacrificados'] = ns[-1]  # ultima columna CON dato (si la mas reciente es "--", _nums ya la omitio)
     return out or None
 
 # ============ MENSUAL: MATANZA ESPAÑA (peso canal + sacrificios) ============
@@ -145,8 +145,9 @@ def ex_matanza(t):
 # ============ MENSUAL: CONSUMO ESPAÑA ============
 def ex_consumo(t):
     """Consumo domestico de carne de cerdo FRESCO, miles de kilos, por (año, mes)."""
-    # Toma la seccion FRESCO (antes de TRANSFORMADOS)
-    seg = t.split('TRANSFORMADOS')[0]
+    # Toma la seccion FRESCO (antes de la seccion "DE TRANSFORMADOS"). OJO: el TITULO contiene
+    # "Y TRANSFORMADOS", por eso partimos por "DE TRANSFORMADOS" (cabecera de seccion), no por "TRANSFORMADOS".
+    seg = re.split(r'DE TRANSFORMADOS', t, flags=re.I)[0]
     mhead = re.search(r'Miles de kilos.*?\n\s*((?:\d{4}\s*)+)', seg, re.S)
     anos = [int(x) for x in re.findall(r'\d{4}', mhead.group(1))] if mhead else []
     anos = [a for a in anos if 2000 <= a <= 2100][:3]
