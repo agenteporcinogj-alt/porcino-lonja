@@ -4,6 +4,9 @@
 import os, re, csv, json, base64, datetime, statistics as st, glob, imaplib, email
 from email.header import decode_header
 import pdfplumber, openpyxl
+import sys as _sys
+_sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import extractores as EX  # extractores de TODAS las familias de PDF (lechon, despiece, aleman, europa, matanza, consumo, censo, china, export, usda...)
 from openpyxl.styles import PatternFill
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from cryptography.hazmat.primitives import hashes
@@ -16,6 +19,7 @@ LOG=os.path.join(HERE,'data','validacion_modelo.csv')
 VISTOS=os.path.join(HERE,'data','correos_vistos.txt')  # Message-IDs ya procesados (persiste en el repo -> no re-descargar correos = no OVERQUOTA)
 CTX_FILE=os.path.join(HERE,'data','contexto_mercado.json')  # contexto rico persistido (Europa/PPA/lechon) para el bot
 CONG_FILE=os.path.join(HERE,'data','predicciones_congeladas.jsonl')  # registro INMUTABLE de trayectorias a medio plazo (para evaluar a 1/4/6 meses)
+SERIES_FILE=os.path.join(HERE,'data','series_historicas.json')  # TODAS las series extraidas de TODOS los PDFs (se alimenta cada dia)
 ENC_OUT=os.path.join(HERE,'docs','data.enc.js')
 # --- Versionado del modelo (lo que la reunion llama "V1"). Cada cambio de variables = nueva version ---
 MODEL_VERSION='v1'
@@ -182,38 +186,142 @@ def ctx_lechon(t):
     m=re.search(r'Precio Base 20 ?kg\s+[\d,]+\s+([\d,]+)',t)
     try: return tf(m.group(1)) if m else None
     except Exception: return None
-def paso_contexto():
-    # Extrae señales ricas de los PDF que haya en disco (los NUEVOS de este run) y las PERSISTE en JSON,
-    # fusionando con lo anterior. Así el contexto sobrevive aunque un PDF viejo no se vuelva a descargar.
+def cargar_series():
+    if os.path.exists(SERIES_FILE):
+        try: return json.load(open(SERIES_FILE))
+        except Exception: pass
+    return {'semanal':{},'mensual':{},'narrativo':{}}
+
+def actualizar_series():
+    # Procesa TODOS los PDFs que haya en _pdfs (los que llegan cada dia del correo), de TODAS las familias,
+    # y los fusiona en SERIES_FILE. Asi cada dia el sistema aprende lo nuevo sin perder lo viejo.
+    series=cargar_series()
+    series.setdefault('semanal',{}); series.setdefault('mensual',{}); series.setdefault('narrativo',{})
+    PAGES={'aleman':1,'precios_eu':1,'lechon':2,'despiece':2,'matanza':2,'consumo':2,
+           'censo':1,'china_import':1,'exportacion':1,'usda':1,'fao':1,'importacion':1,'china_produccion':1}
+    nuevos=0
+    for f in sorted(glob.glob(os.path.join(PDFS,'*.pdf'))):
+        fn=os.path.basename(f); fam=EX.familia(fn)
+        if not fam or fam in ('cotizacion','boletin','ppa'): continue
+        fx=EX.EXTRACTOR.get(fam)
+        if not fx: continue
+        try:
+            with pdfplumber.open(f) as pdf: t='\n'.join((p.extract_text() or '') for p in pdf.pages[:PAGES.get(fam,2)])
+        except Exception: continue
+        r=fx(t)
+        if not r: continue
+        if fam in ('lechon','despiece','aleman','precios_eu'):
+            iso=EX.iso_de_nombre(fn)
+            if not iso: continue
+            key=f"{iso['y']}-W{iso['w']:02d}"; d=series['semanal'].setdefault(fam,{})
+            if key not in d or iso['fecha']>=d[key].get('fecha',''): d[key]={**r,'fecha':iso['fecha']}; nuevos+=1
+        elif fam in ('matanza','consumo'):
+            tgt=series['mensual'].setdefault(fam,{'anos':[],'series':{}})
+            for ano in r.get('anos',[]):
+                if ano not in tgt['anos']: tgt['anos'].append(ano)
+            for ano,meses in r.get('series',{}).items():
+                tgt['series'].setdefault(str(ano),{})
+                for mes,val in meses.items(): tgt['series'][str(ano)][str(mes)]=val
+            tgt['anos']=sorted(set(tgt['anos'])); nuevos+=1
+        else:
+            iso=EX.iso_de_nombre(fn) or {}; tl=series['narrativo'].setdefault(fam,[])
+            if not any(x.get('archivo')==fn for x in tl):
+                tl.append({'fecha':iso.get('fecha',''),'archivo':fn,'titular':r.get('titular'),
+                           'resumen':r.get('resumen'),'periodo':r.get('periodo','')})
+                tl.sort(key=lambda x:(x.get('periodo') or '',x.get('fecha') or '',x.get('archivo') or '')); series['narrativo'][fam]=tl[-24:]; nuevos+=1
+    series['generado']=datetime.datetime.now().isoformat()
+    try: json.dump(series,open(SERIES_FILE,'w'),ensure_ascii=False)
+    except Exception as e: print('  (no se pudo guardar series:',e,')')
+    print(f'  Series actualizadas (familias nuevas/tocadas: {nuevos}). Semanal={ {k:len(v) for k,v in series["semanal"].items()} }')
+    return series
+
+def _ult_semanal(serie):
+    # ultimo valor de una serie semanal {'2026-W39':{...}}
+    if not serie: return None
+    k=sorted(serie)[-1]; return serie[k]
+def _mini_trend(serie,campo,n=12):
+    # ultimos n valores de un campo (acepta campo con '.' para anidado) para que el bot vea la tendencia
+    out=[]
+    for k in sorted(serie)[-n:]:
+        v=serie[k]
+        for p in campo.split('.'):
+            v=v.get(p) if isinstance(v,dict) else None
+            if v is None: break
+        if v is not None: out.append({'sem':k,'v':v})
+    return out
+
+def construir_contexto_rico(series, ppa_ctx=None, ppa_hist=None):
+    # Construye el SNAPSHOT que viaja cifrado a la web y que recibe el chatbot: ultimo valor + tendencia
+    # de cada serie + titulares de los informes de fondo. Para que el bot SEPA todo lo que manda Daniel.
+    sw=series.get('semanal',{}); sm=series.get('mensual',{}); sn=series.get('narrativo',{})
     ctx={}
+    # Europa (precios de todos los paises)
+    eu=_ult_semanal(sw.get('precios_eu',{}))
+    if eu:
+        ctx['europa']={'vivo_ue':eu.get('vivo_ue'),'cotizaciones':eu.get('cotizaciones'),'fecha':eu.get('fecha'),
+                       'tendencia_espana':_mini_trend(sw['precios_eu'],'vivo_ue.espana')}
+    # Lechon
+    le=_ult_semanal(sw.get('lechon',{}))
+    if le: ctx['lechon']={**{k:v for k,v in le.items() if k!='fecha'},'fecha':le.get('fecha'),
+                          'tendencia':_mini_trend(sw['lechon'],'nacional_20kg')}
+    # Despiece (precio de las piezas)
+    de=_ult_semanal(sw.get('despiece',{}))
+    if de: ctx['despiece']=de
+    # Mercado aleman (AMI canal + matanza)
+    al=_ult_semanal(sw.get('aleman',{}))
+    if al: ctx['aleman']={**al,'tendencia_ponderado':_mini_trend(sw['aleman'],'ponderado')}
+    # Peso de la canal en Espana (matanza, mensual) -> lo que pidio Francisco
+    mz=sm.get('matanza',{}).get('series',{})
+    if mz:
+        anos=sorted(mz,key=int); ultano=anos[-1]; meses=sorted(mz[ultano],key=int); ultmes=meses[-1]
+        ctx['peso_canal_es']={'ano':int(ultano),'mes':int(ultmes),'valor':mz[ultano][ultmes].get('peso_canal'),
+                              'cabezas_miles':mz[ultano][ultmes].get('cabezas_miles'),
+                              'serie_ultano':[{'mes':int(m),'peso':mz[ultano][m].get('peso_canal')} for m in meses]}
+    # Consumo (mensual)
+    cn=sm.get('consumo',{}).get('series',{})
+    if cn:
+        anos=sorted(cn,key=int); ultano=anos[-1]; meses=sorted(cn[ultano],key=int)
+        if meses: ctx['consumo_es']={'ano':int(ultano),'mes':int(meses[-1]),'fresco_miles_kg':cn[ultano][meses[-1]]}
+    # Fundamentales de fondo (titulares de los ultimos informes de cada tipo)
+    fund={}
+    etiq={'censo':'censo_porcino','china_import':'china_importacion','exportacion':'exportacion',
+          'usda':'previsiones_usda','fao':'previsiones_fao','importacion':'importacion','china_produccion':'china_produccion'}
+    for fam,nom in etiq.items():
+        tl=sn.get(fam,[])
+        if tl: fund[nom]={'titular':tl[-1].get('titular'),'resumen':tl[-1].get('resumen'),'fecha':tl[-1].get('fecha')}
+    if fund: ctx['fundamentales']=fund
+    # PPA (se mantiene el extractor especifico, es la variable nº1)
+    if ppa_ctx: ctx['ppa']=ppa_ctx
+    if ppa_hist: ctx['ppa_historico']=ppa_hist
+    return ctx
+
+def paso_contexto():
+    # 1) Actualiza las series con los PDFs nuevos del correo. 2) Procesa PPA (extractor dedicado).
+    # 3) Construye el contexto rico para el chatbot/web. 4) Persiste contexto para trazabilidad.
+    series=actualizar_series()
+    prev={}
     if os.path.exists(CTX_FILE):
-        try: ctx=json.load(open(CTX_FILE))
-        except Exception: ctx={}
+        try: prev=json.load(open(CTX_FILE))
+        except Exception: prev={}
     hoy=datetime.date.today().isoformat()
+    ppa_ctx=prev.get('ppa'); ppa_hist=prev.get('ppa_historico',[])
     try:
-        pe=_latest_pdf('PE*.pdf')
-        if pe:
-            eu=ctx_europa(_pdftxt(pe))
-            if eu: ctx['europa']={'datos':eu,'fecha':hoy}
         ppaf=_latest_pdf('*PPA*.pdf')
         if ppaf:
             pp=ctx_ppa(_pdftxt(ppaf))
             if pp:
-                ctx['ppa']={**pp,'fecha':hoy}
-                hist=ctx.get('ppa_historico',[]); sem=pp.get('semana_informe')
-                if sem is not None and not any(h.get('semana')==sem for h in hist):
-                    hist.append({'semana':sem,'fecha':hoy,'casos_nuevos':pp.get('casos_nuevos_jabali'),
-                                 'acumulados':pp.get('acumulados_positivos'),'domestico':(0 if pp.get('sin_positivos_domestico') else 1)})
-                    ctx['ppa_historico']=sorted(hist,key=lambda h:h.get('semana') or 0)[-60:]
-        lef=_latest_pdf('LE*.pdf')
-        if lef:
-            le=ctx_lechon(_pdftxt(lef))
-            if le is not None: ctx['lechon_nacional_20kg']={'valor':le,'fecha':hoy}
-        try: json.dump(ctx,open(CTX_FILE,'w'),ensure_ascii=False)
-        except Exception as e: print('  (no se pudo guardar contexto:',e,')')
-        print(f'  Contexto mercado persistido: {list(ctx.keys())}')
+                ppa_ctx={**pp,'fecha':hoy}
+                sem=pp.get('semana_informe')
+                if sem is not None and not any(h.get('semana')==sem for h in ppa_hist):
+                    ppa_hist.append({'semana':sem,'fecha':hoy,'casos_nuevos':pp.get('casos_nuevos_jabali'),
+                                     'acumulados':pp.get('acumulados_positivos'),'domestico':(0 if pp.get('sin_positivos_domestico') else 1)})
+                    ppa_hist=sorted(ppa_hist,key=lambda h:h.get('semana') or 0)[-60:]
     except Exception as e:
-        print('  (contexto no disponible:',e,')')
+        print('  (PPA no disponible:',e,')')
+    ctx=construir_contexto_rico(series,ppa_ctx,ppa_hist)
+    try: json.dump(ctx,open(CTX_FILE,'w'),ensure_ascii=False)
+    except Exception as e: print('  (no se pudo guardar contexto:',e,')')
+    print(f'  Contexto rico: {list(ctx.keys())}')
     return ctx
 
 # ---------- 2) ACTUALIZAR MAESTRO ----------
