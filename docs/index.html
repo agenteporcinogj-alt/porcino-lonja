@@ -313,6 +313,25 @@ footer a{color:var(--accent);cursor:pointer}
     <div class="chartcard"><div id="chart"></div></div>
   </section>
 
+  <!-- TERMÓMETRO DEL MERCADO (fundamentales en vivo) -->
+  <style>
+  .fgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(235px,1fr));gap:12px;margin-top:12px}
+  .fcard{border:1px solid var(--line);border-radius:14px;padding:13px 15px;background:var(--surface2)}
+  .fct{font-family:"Spectral",serif;font-weight:700;font-size:1rem;margin-bottom:9px}
+  .frow{display:flex;justify-content:space-between;gap:10px;font-size:.87rem;padding:4px 0;border-bottom:1px solid var(--line)}
+  .frow:last-child{border-bottom:0}
+  .frow span{color:var(--muted)} .frow b{color:var(--ink);font-variant-numeric:tabular-nums}
+  .fcs{font-size:.77rem;color:var(--muted);margin-top:9px;line-height:1.4}
+  .fnews{font-size:.81rem;color:var(--ink);padding:5px 0;border-bottom:1px solid var(--line);line-height:1.35}
+  .fnews:last-child{border-bottom:0} .fnews b{color:var(--muted);font-weight:600}
+  .spark{width:100%;height:30px;margin-top:9px;display:block}
+  </style>
+  <section class="rise">
+    <h2>Termómetro del mercado</h2>
+    <p class="slab">Todo lo que el modelo y el asistente vigilan del mercado, de un vistazo. Datos <b>reales</b> extraídos de los informes de Mercolleida, actualizados cada semana.</p>
+    <div id="fund"></div>
+  </section>
+
   <!-- MEDIO PLAZO (predicción congelada) -->
   <section class="rise" id="mp-sec">
     <h2>Recorrido a medio plazo (6 meses)</h2>
@@ -412,8 +431,79 @@ function render(d){
       $('fiab-sub').innerHTML='error medio en <b>17 años de simulación</b> (acierta ≤2 cts el '+d.precision.within2+'%) · <b>aún sin validar en vivo</b>';
     }
   })();
-  renderWhy(d);renderEsc(d);renderEvt(d);renderHist(d);renderDemanda();renderMedioPlazo(d);drawChart(d.serie);drawComov(d.serie_paises);
+  renderWhy(d);renderEsc(d);renderEvt(d);renderHist(d);renderDemanda();renderFundamentales(d);renderMedioPlazo(d);drawChart(d.serie);drawComov(d.serie_paises);
   initChat();
+}
+function _sparkMini(vals){
+  if(!vals||vals.length<2) return '';
+  const W=120,H=30,mn=Math.min(...vals),mx=Math.max(...vals),rng=(mx-mn)||1;
+  const pts=vals.map((v,i)=>[(i/(vals.length-1))*W,H-3-((v-mn)/rng)*(H-6)]);
+  const path=pts.map((p,i)=>(i?'L':'M')+p[0].toFixed(1)+' '+p[1].toFixed(1)).join(' ');
+  const up=vals[vals.length-1]>=vals[0];
+  return '<svg class="spark" viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="none"><path d="'+path+'" fill="none" stroke="'+(up?'var(--good)':'var(--bad)')+'" stroke-width="2" vector-effect="non-scaling-stroke"/></svg>';
+}
+function _fdate(iso){
+  if(!iso) return ''; const m=String(iso).split('-'); if(m.length<3) return iso;
+  const mo=['','ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'][+m[1]]||m[1];
+  return (+m[2])+' '+mo;
+}
+function renderFundamentales(d){
+  const el=$('fund'); if(!el) return;
+  const cm=d.contexto_mercado||{};
+  const row=(k,v)=>'<div class="frow"><span>'+k+'</span><b>'+v+'</b></div>';
+  const card=(t,inner,sub)=>inner?'<div class="fcard"><div class="fct">'+t+'</div>'+inner+(sub?'<div class="fcs">'+sub+'</div>':'')+'</div>':'';
+  const cards=[];
+  const ce=cm.cereales;
+  if(ce){
+    let inner=''; const r2=(k,lbl)=>{if(ce[k]!=null)inner+=row(lbl,Math.round(ce[k])+' €/t')};
+    r2('maiz','Maíz');r2('harina_soja','Harina soja');r2('cebada','Cebada');r2('trigo_forrajero','Trigo forraj.');
+    inner+=ce.tendencia_maiz?_sparkMini(ce.tendencia_maiz.map(x=>x.v)):'';
+    cards.push(card('🌾 Coste del pienso',inner,'Maíz y soja son el grueso del coste de engorde. ('+_fdate(ce.fecha)+')'));
+  }
+  const pc=cm.peso_canal_es;
+  if(pc){
+    let inner=row('Peso medio canal',fmt(pc.valor,1)+' kg');
+    if(pc.cabezas_miles!=null) inner+=row('Cabezas sacrif./mes',Math.round(pc.cabezas_miles).toLocaleString('es-ES')+' mil');
+    inner+=pc.serie_ultano?_sparkMini(pc.serie_ultano.map(x=>x.peso).filter(v=>v!=null)):'';
+    cards.push(card('⚖️ Peso de la canal (España)',inner,'Menos peso = menos kilos de carne = menos oferta (apoya precio). Mes '+pc.mes+'/'+pc.ano+'.'));
+  }
+  const eu=cm.europa&&cm.europa.vivo_ue;
+  if(eu){
+    const ord=[['espana','España'],['francia','Francia'],['alemania','Alemania'],['paises_bajos','P. Bajos'],['belgica','Bélgica'],['dinamarca','Dinamarca']];
+    let inner=ord.filter(([k])=>eu[k]!=null).map(([k,n])=>row(n,fmt(eu[k],2)+' €')).join('');
+    cards.push(card('🇪🇺 Cerdo en Europa (€/kg vivo)',inner,'Francia y Alemania suelen moverse ~1 semana antes que España. ('+_fdate(cm.europa.fecha)+')'));
+  }
+  const oc=cm.otras_carnes;
+  if(oc){
+    let inner='';
+    if(oc.cordero_19_23kg!=null) inner+=row('Cordero (19-23kg)',fmt(oc.cordero_19_23kg,2));
+    if(oc.vacuno_anojo_R!=null) inner+=row('Vacuno añojo R',fmt(oc.vacuno_anojo_R,2)+' €/kg');
+    if(oc.vacuno_ternera_R!=null) inner+=row('Vacuno ternera R',fmt(oc.vacuno_ternera_R,2)+' €/kg');
+    if(oc.vacuno_vaca_R!=null) inner+=row('Vacuno vaca R',fmt(oc.vacuno_vaca_R,2)+' €/kg');
+    cards.push(card('🥩 Otras carnes',inner,'Sustitutivas del cerdo en el consumo. El pollo no lo cotiza Mercolleida.'));
+  }
+  const le=cm.lechon;
+  if(le&&le.nacional_20kg!=null){
+    let inner=row('Lechón nacional 20kg',fmt(le.nacional_20kg,1)+' €');
+    if(le.importacion_nl_contrato!=null) inner+=row('Lechón holandés',fmt(le.importacion_nl_contrato,1)+' €');
+    inner+=le.tendencia?_sparkMini(le.tendencia.map(x=>x.v)):'';
+    cards.push(card('🐽 Lechón (indicador adelantado)',inner,'Lo que se paga hoy marca la oferta de cerdos en ~4-5 meses. ('+_fdate(le.fecha)+')'));
+  }
+  const p=cm.ppa;
+  if(p){
+    const dom=p.sin_positivos_domestico;
+    let inner=row('Casos nuevos (jabalí)',p.casos_nuevos_jabali!=null?p.casos_nuevos_jabali:'—');
+    inner+=row('¿En granjas?','<span style="color:'+(dom?'var(--good)':'var(--bad)')+'">'+(dom?'NO ✓':'SÍ ⚠️')+'</span>');
+    cards.push(card('🦠 Peste Porcina Africana',inner,p.resumen||''));
+  }
+  const f=cm.fundamentales;
+  if(f){
+    let inner=''; const add=(k,lbl)=>{if(f[k]&&f[k].titular)inner+='<div class="fnews"><b>'+lbl+':</b> '+f[k].titular+'</div>';};
+    add('china_importacion','China importación');add('china_produccion','China producción');add('exportacion','Exportación España');add('previsiones_usda','USDA');
+    cards.push(card('🌍 Fondo — último informe',inner,'Lo que mueve la exportación y la oferta a medio plazo.'));
+  }
+  const html=cards.filter(Boolean).join('');
+  el.innerHTML = html? '<div class="fgrid">'+html+'</div>' : '<p class="slab">Aún no han entrado datos de contexto de mercado.</p>';
 }
 function renderMedioPlazo(d){
   const mp=d.medio_plazo; const sec=$('mp-sec'); if(!sec)return;
