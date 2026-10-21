@@ -293,8 +293,15 @@ def construir_contexto_rico(series, ppa_ctx=None, ppa_hist=None):
     if al: ctx['aleman']={**al,'tendencia_ponderado':_mini_trend(sw['aleman'],'ponderado')}
     # Cereales y piensos (€/t) -> coste de producir el cerdo. maiz y soja son los que mas pesan.
     ce=_ult_semanal(sw.get('cereales',{}))
-    if ce: ctx['cereales']={**ce,'tendencia_maiz':_mini_trend(sw['cereales'],'maiz'),
-                            'tendencia_soja':_mini_trend(sw['cereales'],'harina_soja')}
+    if ce:
+        cer={k:ce[k] for k in ('trigo_forrajero','cebada','maiz','harina_soja','colza','fecha') if k in ce}
+        ctx['cereales']={**cer,'tendencia_maiz':_mini_trend(sw['cereales'],'maiz'),
+                         'tendencia_soja':_mini_trend(sw['cereales'],'harina_soja')}
+        # Otras carnes (sustitutivas del cerdo): cordero (ovino) y vacuno. Del mismo Boletin.
+        carn={k:ce[k] for k in ('cordero_19_23kg','vacuno_anojo_R','vacuno_ternera_R','vacuno_vaca_R') if k in ce}
+        if carn: ctx['otras_carnes']={**carn,'fecha':ce.get('fecha'),
+                                       'tendencia_cordero':_mini_trend(sw['cereales'],'cordero_19_23kg'),
+                                       'nota':'pollo no disponible (Mercolleida no lo cotiza)'}
     # Peso de la canal en Espana (matanza, mensual) -> lo que pidio Francisco
     mz=sm.get('matanza',{}).get('series',{})
     if mz:

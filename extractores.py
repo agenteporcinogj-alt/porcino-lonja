@@ -139,6 +139,17 @@ def ex_cereales(t):
         if m:
             try: out[k] = tf(m.group(2))
             except Exception: pass
+    # OTRAS CARNES (del mismo Boletín): sustitutivas del cerdo en el consumo. Cordero (ovino) y vacuno.
+    # Pollo NO lo cotiza Mercolleida -> necesitaria fuente externa.
+    carnes = {'cordero_19_23kg': r'Cordero de 19 a 23 kg\s+(\d+,\d{2})',   # Mercolleida
+              'vacuno_anojo_R':  r'Añojo R\s+(\d+,\d{2})',
+              'vacuno_ternera_R':r'Ternera R\s+(\d+,\d{2})',
+              'vacuno_vaca_R':   r'Vaca R\s+(\d+,\d{2})'}
+    for k, pat in carnes.items():
+        m = re.search(pat, t)
+        if m:
+            try: out[k] = tf(m.group(1))
+            except Exception: pass
     ms = re.search(r'SEMANA\s+(\d{1,2})\s*/\s*(\d{4})', t)
     if ms:
         out['semana'] = int(ms.group(1)); out['anio'] = int(ms.group(2))
