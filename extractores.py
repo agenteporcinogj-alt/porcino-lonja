@@ -155,6 +155,18 @@ def ex_cereales(t):
         out['semana'] = int(ms.group(1)); out['anio'] = int(ms.group(2))
     return out or None
 
+# ============ SEMANAL: PESO MEDIO (muestreo de 20 mataderos, PDF de cotización PO) ============
+def ex_pesos(t):
+    """Tabla 'PESOS MEDIOS' del PO. Fila de 12 valores = [semana ANTERIOR: año Y..Y-5] + [semana ACTUAL: Y..Y-5].
+    Validado contra el propio comentario del PDF (sem39/2026: +655 g, 3,5 kg por debajo de 2025)."""
+    out = {}
+    for lab, key in (('Mataderos (kg canal)', 'canal'), ('Productores (kg vivo)', 'vivo')):
+        m = re.search(re.escape(lab) + r'([^\n]*)', t)
+        if not m: continue
+        ns = [tf(x) for x in re.findall(r'\d{2,3},\d{2}', m.group(1))]
+        if len(ns) == 12: out[key] = {'ant': ns[:6], 'act': ns[6:]}
+    return out or None
+
 # ============ MENSUAL: MATANZA ESPAÑA (peso canal + sacrificios) ============
 def ex_matanza(t):
     """Tabla mensual: miles de cabezas | toneladas | peso medio canal, columnas por año.

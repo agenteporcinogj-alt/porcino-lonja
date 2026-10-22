@@ -332,6 +332,15 @@ footer a{color:var(--accent);cursor:pointer}
     <div id="fund"></div>
   </section>
 
+  <!-- PREDICTOR DEL PESO DE CANAL (petición de Francisco) -->
+  <section class="rise" id="peso-sec">
+    <h2>Peso de la canal — predictor</h2>
+    <p class="slab">Peso medio en canal del <b>muestreo semanal de 20 mataderos</b> de Mercolleida y su previsión a 3 meses. El peso marca <b>cuántos kilos de carne llegan al mercado</b>: cerdos más ligeros de lo normal = menos oferta = apoyo al precio, y al revés.</p>
+    <div class="fgrid" id="peso-stats" style="margin-bottom:12px"></div>
+    <div id="peso-chart"></div>
+    <p class="slab" id="peso-note" style="margin-top:6px"></p>
+  </section>
+
   <!-- MEDIO PLAZO (predicción congelada) -->
   <section class="rise" id="mp-sec">
     <h2>Recorrido a medio plazo (6 meses)</h2>
@@ -431,7 +440,7 @@ function render(d){
       $('fiab-sub').innerHTML='error medio en <b>17 años de simulación</b> (acierta ≤2 cts el '+d.precision.within2+'%) · <b>aún sin validar en vivo</b>';
     }
   })();
-  renderWhy(d);renderEsc(d);renderEvt(d);renderHist(d);renderDemanda();renderFundamentales(d);renderMedioPlazo(d);drawChart(d.serie);drawComov(d.serie_paises);
+  renderWhy(d);renderEsc(d);renderEvt(d);renderHist(d);renderDemanda();renderFundamentales(d);renderPeso(d);renderMedioPlazo(d);drawChart(d.serie);drawComov(d.serie_paises);
   initChat();
 }
 function _sparkMini(vals){
@@ -505,24 +514,52 @@ function renderFundamentales(d){
   const html=cards.filter(Boolean).join('');
   el.innerHTML = html? '<div class="fgrid">'+html+'</div>' : '<p class="slab">Aún no han entrado datos de contexto de mercado.</p>';
 }
+function renderPeso(d){
+  const sec=$('peso-sec'); if(!sec) return;
+  const p=(d.contexto_mercado||{}).peso_semanal;
+  if(!p||!p.serie||!p.serie.length){sec.style.display='none';return;}
+  const real=p.serie, tr=p.traj||[], nR=real.length, lab=x=>'s'+x.w+'/'+String(x.y).slice(2);
+  const pad=n=>Array(Math.max(0,n)).fill(null);
+  const spec={type:'line',title:'',labels:real.map(lab).concat(tr.map(lab)),series:[
+    {name:'Peso real (kg canal)',data:real.map(x=>x.canal).concat(pad(tr.length)),color:'var(--accent)'},
+    {name:'Previsión',data:pad(nR-1).concat([real[nR-1].canal]).concat(tr.map(x=>x.canal)),color:'var(--blue)'},
+    {name:'Banda alta',data:pad(nR).concat(tr.map(x=>x.hi)),color:'var(--muted)'},
+    {name:'Banda baja',data:pad(nR).concat(tr.map(x=>x.lo)),color:'var(--muted)'}]};
+  const box=$('peso-chart'); box.className='chatchart'; box.innerHTML=chatChart(spec); wireChatChart(box,spec);
+  const sg=v=>(v>0?'+':'')+fmt(v,1);
+  const col=v=>v<0?'var(--good)':v>0?'var(--bad)':'var(--ink)';   // menos peso = menos oferta = bueno para el precio
+  const row=(k,v)=>'<div class="frow"><span>'+k+'</span><b>'+v+'</b></div>';
+  const u=p.ultimo||{}, prev=p.prevision||[], ph=h=>(prev.find(x=>x.h===h)||{});
+  const imp=p.impacto_precio_cts||{};
+  let c1=row('Esta semana ('+(u.sem||'').replace('-W',' · sem ')+')',fmt(u.canal_kg,2)+' kg canal')+row('Equivale en vivo',fmt(u.vivo_kg,1)+' kg ('+fmt((u.rendimiento||0)*100,1)+'% rend.)')
+    +row('Vs lo normal','<span style="color:'+col(p.anomalia_vs_normal_kg)+'">'+sg(p.anomalia_vs_normal_kg)+' kg</span>')
+    +row('Vs hace un año',p.vs_anio_anterior_kg!=null?sg(p.vs_anio_anterior_kg)+' kg':'—')+row('Últimas 4 semanas',sg(p.cambio_4_semanas_kg)+' kg');
+  let c2=[1,4,13].map(h=>{const x=ph(h);return x.canal!=null?row('En '+(h===1?'1 semana':h===4?'1 mes':'3 meses'),fmt(x.canal,1)+' kg <span style="color:var(--muted);font-weight:400">(±'+fmt((x.hi-x.lo)/2,1)+')</span>'):''}).join('');
+  let c3=['4','8','13'].filter(h=>imp[h]!=null).map(h=>row('A '+h+' semanas','<span style="color:'+(imp[h]>0?'var(--good)':'var(--bad)')+'">'+(imp[h]>0?'+':'')+fmt(imp[h],1)+' cts</span>')).join('');
+  $('peso-stats').innerHTML='<div class="fcard"><div class="fct">⚖️ Peso actual</div>'+c1+'</div>'
+    +'<div class="fcard"><div class="fct">🔮 Previsión del peso</div>'+c2+'<div class="fcs">Error medio del predictor en backtest 2022-26: ±0,3 kg a 1 semana, ±0,7 a 1 mes, ±1,5 a 3 meses (el "repetir el último" falla el doble).</div></div>'
+    +(c3?'<div class="fcard"><div class="fct">💶 Efecto en el precio</div>'+c3+'<div class="fcs">Ajuste sobre la curva estacional por tener cerdos '+(p.anomalia_vs_normal_kg<0?'más ligeros':'más pesados')+' de lo normal. Orientativo: en backtest mejora la curva a 1-3 meses un 3-5%; se mide en vivo como modelo V2.</div></div>':'');
+  $('peso-note').innerHTML='Fuente: tabla "Pesos medios" de la cotización semanal de Mercolleida (histórico reconstruido desde 2019). Se actualiza solo cada jueves.';
+}
 function renderMedioPlazo(d){
   const mp=d.medio_plazo; const sec=$('mp-sec'); if(!sec)return;
   if(!mp||!mp.actual){sec.style.display='none';return;}
   const t=mp.actual.trayectoria||[];
   const labels=t.map(p=>'s'+p.w+'/'+String(p.y).slice(2));
-  const spec={type:'line',title:'',labels,series:[
-    {name:'Precio estimado',data:t.map(p=>p.central)},
-    {name:'Banda alta',data:t.map(p=>p.hi)},
-    {name:'Banda baja',data:t.map(p=>p.lo)}
-  ]};
+  const a2=mp.actual_v2, v2=(a2&&a2.target_y===mp.actual.target_y&&a2.target_w===mp.actual.target_w)?a2.trayectoria:null;
+  const ser=[{name:'Precio estimado (V1)',data:t.map(p=>p.central),color:'var(--accent)'}];
+  if(v2) ser.push({name:'Ajustado por peso (V2)',data:v2.map(p=>p.central),color:'var(--good)'});
+  ser.push({name:'Banda alta',data:t.map(p=>p.hi),color:'var(--muted)'},{name:'Banda baja',data:t.map(p=>p.lo),color:'var(--muted)'});
+  const spec={type:'line',title:'',labels,series:ser};
   const box=$('mp-chart'); box.className='chatchart'; box.innerHTML=chatChart(spec); wireChatChart(box,spec);
-  $('mp-note').innerHTML='Congelada el <b>'+(mp.actual.issued_at||'—')+'</b> (modelo <b>'+(mp.version||'v1')+'</b>). Guardadas <b>'+(mp.n_congeladas||0)+'</b> predicción(es) para evaluar cuando pase el tiempo.';
+  $('mp-note').innerHTML='Congelada el <b>'+(mp.actual.issued_at||'—')+'</b> (modelo <b>'+(mp.version||'v1')+'</b>). Guardadas <b>'+(mp.n_congeladas||0)+'</b> predicción(es) para evaluar cuando pase el tiempo.'
+    +(v2?' <br>🟢 <b>V2</b> = la misma curva corregida por el peso de canal (1-3 meses). Se congela <b>en paralelo</b> desde el '+(a2.issued_at||'—')+' para comparar con la V1 en las mismas fechas, como pidió Daniel.':'');
   const ev=mp.eval||[];
   if(ev.length){
     const TD='style="padding:3px 8px;border-bottom:1px solid var(--line)"';
     let h='<h3 style="margin:10px 0 4px">Precisión real a medio plazo</h3><table style="border-collapse:collapse;width:100%;font-size:13px"><thead><tr>'
-      +['Horizonte','Error medio','Dentro de banda','Semanas'].map(c=>'<th '+TD+';text-align:left;color:var(--muted)">'+c+'</th>').join('')+'</tr></thead><tbody>';
-    ev.forEach(r=>{h+='<tr><td '+TD+'>'+(r.horizonte_sem===0?'esta semana':r.horizonte_sem+' sem')+'</td><td '+TD+'><b>'+fmt(r.mae_cts,1)+' cts</b></td><td '+TD+'>'+r.cobertura_pct+'%</td><td '+TD+'>'+r.n+'</td></tr>';});
+      +['Modelo','Horizonte','Error medio','Dentro de banda','Semanas'].map(c=>'<th '+TD+';text-align:left;color:var(--muted)">'+c+'</th>').join('')+'</tr></thead><tbody>';
+    ev.forEach(r=>{h+='<tr><td '+TD+'>'+(r.version==='v1'?'V1':'V2 peso')+'</td><td '+TD+'>'+(r.horizonte_sem===0?'esta semana':r.horizonte_sem+' sem')+'</td><td '+TD+'><b>'+fmt(r.mae_cts,1)+' cts</b></td><td '+TD+'>'+r.cobertura_pct+'%</td><td '+TD+'>'+r.n+'</td></tr>';});
     h+='</tbody></table>';
     $('mp-eval').innerHTML=h;
   }else{
@@ -939,10 +976,11 @@ Luego responde directo y útil, sin soltar todo el razonamiento interno. Si dete
    - .aleman → mercado alemán AMI: canal S/E/U, '.ponderado' (precio ponderado, el que mueve Europa del norte), '.cerda_m', '.cerdos_sacrificados', y '.tendencia_ponderado'. Alemania es el termómetro del norte de la UE.
    - .cereales → precios €/tonelada de los INSUMOS DEL PIENSO (coste de producir el cerdo): '.maiz', '.harina_soja', '.cebada', '.trigo_forrajero', '.colza', con '.tendencia_maiz' y '.tendencia_soja'. El maíz y la soja son los que más pesan en el pienso. Si suben, aprietan el margen del ganadero (coste arriba); si el cerdo está barato Y el pienso caro, el productor pierde por los dos lados. Útil para preguntas de costes, margen y rentabilidad del engorde.
    - .otras_carnes → precios de carnes SUSTITUTIVAS del cerdo: '.cordero_19_23kg' (ovino, Mercolleida), '.vacuno_anojo_R', '.vacuno_ternera_R', '.vacuno_vaca_R' (€/kg), con '.tendencia_cordero'. Si otras carnes suben y el cerdo está barato, el consumidor se pasa al cerdo (apoya demanda). Nota: el pollo NO está (Mercolleida no lo cotiza).
-   - .peso_canal_es → PESO MEDIO de la canal en matadero España (kg), '.valor' del último mes y '.serie_ultano' (mes a mes). Menos peso = animales más ligeros = menos oferta de carne (sube precio); más peso = sobreoferta (baja). Es una variable que vigila mucho Francisco.
+   - .peso_canal_es → PESO MEDIO de la canal en matadero España (kg, dato MENSUAL oficial del MAPA), '.valor' del último mes y '.serie_ultano'.
+   - .peso_semanal → el PREDICTOR DEL PESO DE CANAL (lo que pidió Francisco), dato SEMANAL del muestreo de 20 mataderos de Mercolleida. '.ultimo' (canal_kg, vivo_kg, rendimiento), '.anomalia_vs_normal_kg' (negativo = cerdos más LIGEROS de lo normal para esta época = menos kilos = apoyo al precio), '.vs_anio_anterior_kg', '.vs_media_5_anios_kg', '.cambio_4_semanas_kg', '.prevision' (kg previstos a h=1,2,4,8,13,26 semanas con 'lo'/'hi'), '.impacto_precio_cts' (ajuste orientativo en céntimos sobre la curva estacional a 4/8/13 semanas por esa anomalía de peso). Error del predictor en backtest: ±0,3 kg a 1 semana, ±0,7 a 1 mes, ±1,5 a 3 meses. IMPORTANTE: a 1 semana el peso NO mejora la predicción del precio (probado en 250 semanas); sí ayuda un poco a 1-3 meses, y por eso existe la curva V2. Si preguntan por peso, kilos, oferta o "cuánto pesan los cerdos", usa esto con sus números.
    - .consumo_es → consumo doméstico de carne de cerdo fresco (miles de kg/mes). Demanda interna.
    - .fundamentales → titulares y resumen de los informes de FONDO más recientes: '.china_importacion' (cuánto importa China, clave para exportación UE), '.exportacion' (exportación española CEXGAN), '.censo_porcino' (censo de madres/reproductoras → oferta futura), '.previsiones_usda' y '.previsiones_fao' (previsiones mundiales), '.china_produccion', '.apertura_semana' (la nota "Cómo empezamos la semana" de Mercolleida de los lunes: el ambiente del mercado AHORA, úsala para "qué pasa esta semana"), '.otros_informes' (encuestas e informes sueltos, p.ej. ISN Alemania). Cada uno trae 'titular', 'resumen' y 'fecha'/'periodo'. ÚSALOS para preguntas de exportación, China, oferta a largo plazo, censo y ambiente de mercado.
-   - .ppa → Peste Porcina Africana (VARIABLE Nº1). 'casos_nuevos_jabali', 'acumulados_positivos', 'sin_positivos_domestico' (si true, sigue SOLO en jabalí, no en granjas → tesis de reapertura de exportación viva), 'apertura_comercial'. Y .ppa_historico = serie semana a semana. Mientras siga solo en jabalí, bien; si salta a cerdo DOMÉSTICO es catastrófico (precio podría caer por debajo de 1€).
+   - .ppa → Peste Porcina Africana (VARIABLE Nº1). 'casos_nuevos_jabali', 'acumulados_positivos', 'sin_positivos_domestico' (si true, sigue SOLO en jabalí, no en granjas → tesis de reapertura de exportación viva), 'apertura_comercial'. Y .ppa_historico = serie semana a semana. OJO, matiz clave (lo dejó claro Francisco): que siga SOLO en jabalí es MEJOR que en granjas, pero NO significa "sin impacto": los vetos comerciales ya están costando dinero (Japón cerrado, cortes de alto valor como panceta sin su mejor destino). Nunca digas que la PPA en jabalí "no afecta" o que su impacto es "limitado". Si salta a cerdo DOMÉSTICO es catastrófico (precio podría caer por debajo de 1€).
    REGLA CLAVE: si te preguntan "¿qué datos nuevos hay esta semana / de los últimos informes?", repasa TODOS estos campos con su fecha y resume lo relevante (precios Europa, lechón, despiece, Alemania, cereales/pienso, peso canal, China/exportación, PPA). TIENES los datos porque Daniel los ha mandado: NO digas "no lo tengo" de algo que esté en contexto_mercado. Solo si un campo concreto no está presente, di que ese informe aún no ha entrado. Cita siempre con su fecha.
 
 6) CALCULADORA SIEMPRE para aritmética. NUNCA calcules de cabeza (te equivocas). Mete la operación en un bloque calc de UNA línea (solo números y + - * / ( ) . ; sin texto, sin €, sin separador de miles: 55000 no 55.000; sin "="). Ejemplo:

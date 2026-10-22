@@ -27,6 +27,12 @@ MODEL_FEATURES='inercia España 3 semanas + delta Francia + delta Alemania + est
 # Banda CALIBRADA con el backtest real (P80 del error absoluto por horizonte, semi-ancho en €).
 # "El 80% de las veces el precio real cayó dentro de ±este valor". Mucho más honesta que una fórmula inventada.
 BANDA_CAL=[0.0,0.019,0.037,0.05,0.069,0.084,0.097,0.111,0.123,0.136,0.151,0.163,0.175,0.186,0.199,0.209,0.221,0.228,0.235,0.247,0.259,0.272,0.276,0.29,0.297,0.308,0.314]
+# --- PREDICTOR DEL PESO DE CANAL (peticion de Francisco). Error medio (kg) por horizonte, backtest walk-forward
+#     2022-2026 sobre 250 semanas: estacional + anomalia con persistencia. Ingenuo (repetir) daba 0,46/1,59/3,71 kg. ---
+PESO_ERR={1:0.27,2:0.43,4:0.70,8:1.08,13:1.46,26:1.84}
+# V2 = V1 + correccion por anomalia de peso a 1-13 semanas (backtest: -3% err a 4 sem, -5% a 8, -4% a 13; empeora a 26 -> no se aplica).
+MODEL_V2='v2-peso'
+MODEL_V2_FEATURES='V1 + correccion por peso de canal anomalo (mas peso de lo normal -> mas oferta -> precio mas bajo), solo 1-13 semanas'
 NUM=re.compile(r'-?\d+,\d+')
 def tf(s): return float(s.replace('.','').replace(',','.'))
 def nbe(l): return [tf(x) for x in NUM.findall(re.split(r'€',l)[0])]
@@ -259,6 +265,24 @@ def actualizar_series():
                 tl.append({'fecha':iso.get('fecha','') or datetime.date.today().isoformat(),'archivo':fn,'titular':r.get('titular'),  # sin fecha en el nombre -> fecha de ingesta (desempate cronologico)
                            'resumen':r.get('resumen'),'periodo':r.get('periodo','')})
                 tl.sort(key=lambda x:(x.get('periodo') or '',x.get('fecha') or '',x.get('archivo') or '')); series['narrativo'][fam]=tl[-24:]; nuevos+=1
+    # PESO SEMANAL (tabla 'PESOS MEDIOS' del PO): cada PO trae esta semana y la anterior, del año actual y 5 previos.
+    ps=series.setdefault('peso_semanal',{})
+    for f in sorted(glob.glob(os.path.join(PDFS,'PO[0-9]*.pdf'))):
+        mm=re.match(r'PO(\d{2})(\d{2})(\d{2})',os.path.basename(f))
+        if not mm: continue
+        try:
+            fecha=datetime.date(2000+int(mm.group(1)),int(mm.group(2)),int(mm.group(3)))
+            with pdfplumber.open(f) as pdf: tp='\n'.join((p.extract_text() or '') for p in pdf.pages)
+        except Exception: continue
+        rp=EX.ex_pesos(tp)
+        if not rp: continue
+        Y,Wk,_=fecha.isocalendar(); pY,pW,_=(fecha-datetime.timedelta(days=7)).isocalendar()
+        for kind,vals in rp.items():
+            for bloque,(yy,ww) in (('act',(Y,Wk)),('ant',(pY,pW))):
+                for k,v in enumerate(vals[bloque]):
+                    key=f"{yy-k}-W{ww:02d}"; rec=ps.setdefault(key,{})
+                    if rec.get('src_'+kind,'')<=fecha.isoformat():   # el PO mas reciente manda (revisiones)
+                        rec[kind]=v; rec['src_'+kind]=fecha.isoformat(); nuevos+=1
     series['generado']=datetime.datetime.now().isoformat()
     try: json.dump(series,open(SERIES_FILE,'w'),ensure_ascii=False)
     except Exception as e: print('  (no se pudo guardar series:',e,')')
@@ -520,8 +544,82 @@ def paso_registro(m):
         for k in sorted(L): w.writerow(L[k])
     return [L[k] for k in sorted(L)]
 
+# ---------- 4a) PREDICTOR DEL PESO DE CANAL ----------
+def _wk(y,w,h):
+    d=datetime.date.fromisocalendar(y,w,1)+datetime.timedelta(days=7*h); return tuple(d.isocalendar()[:2])
+def modelo_peso(series,esp=None,seas=None):
+    """Peso de canal semanal (20 mataderos Mercolleida): nivel 52 sem + perfil estacional + anomalia que se disipa.
+    Devuelve contexto compacto para web/chatbot y la correccion V2 del precio (cts) por horizonte 1-13."""
+    ps=series.get('peso_semanal') or {}
+    Wd={}; Vd={}
+    for k,v in ps.items():
+        try: y,w=map(int,k.split('-W'))
+        except Exception: continue
+        if v.get('canal') is not None: Wd[(y,w)]=v['canal']
+        if v.get('vivo') is not None: Vd[(y,w)]=v['vivo']
+    keys=sorted(Wd)
+    if len(keys)<120: return None
+    woy=lambda w: min(w,52)
+    pref=[0.0]
+    for k in keys: pref.append(pref[-1]+Wd[k])
+    idx={k:i for i,k in enumerate(keys)}
+    def level(k):
+        i=idx[k]; a=max(0,i-51); return (pref[i+1]-pref[a])/(i+1-a)
+    last=keys[-1]; yl=last[0]
+    by={}
+    for (y,w),v in Wd.items(): by.setdefault(y,[]).append(v)
+    ym={y:st.mean(v) for y,v in by.items() if len(v)>=40 and y<yl}
+    dev={}
+    for (y,w),v in Wd.items():
+        if y in ym: dev.setdefault(woy(w),[]).append(v-ym[y])
+    D={w:st.mean(v) for w,v in dev.items()}
+    res=lambda k: Wd[k]-level(k)-D.get(woy(k[1]),0.0)
+    xs=[];ys=[]
+    for a,b in zip(keys[51:],keys[52:]):
+        if _wk(a[0],a[1],1)==b: xs.append(res(a)); ys.append(res(b))
+    phi=sum(x*y for x,y in zip(xs,ys))/sum(x*x for x in xs) if xs else 0.95
+    phi=max(0.0,min(phi,0.99))
+    L=level(last); r0=res(last)
+    def err(h):
+        hs=sorted(PESO_ERR); lo=max([x for x in hs if x<=h] or [hs[0]]); hi=min([x for x in hs if x>=h] or [hs[-1]])
+        return PESO_ERR[lo] if lo==hi else PESO_ERR[lo]+(PESO_ERR[hi]-PESO_ERR[lo])*(h-lo)/(hi-lo)
+    traj=[]
+    for h in range(1,27):
+        t=_wk(last[0],last[1],h); c=L+D.get(woy(t[1]),0.0)+(phi**h)*r0; e=err(h)
+        traj.append({'y':t[0],'w':t[1],'h':h,'canal':round(c,2),'lo':round(c-e,2),'hi':round(c+e,2)})
+    # rendimiento canal/vivo reciente (para pasar a kg vivo)
+    rr=[Wd[k]/Vd[k] for k in keys[-26:] if k in Vd and Vd[k]]
+    rend=st.mean(rr) if rr else 0.777
+    ly=(last[0]-1,last[1]); prev4=keys[-5] if len(keys)>=5 else keys[0]
+    m5=[Wd[(last[0]-j,last[1])] for j in range(1,6) if (last[0]-j,last[1]) in Wd]
+    # impacto en precio: beta_h = cts por kg de anomalia, ajustado con TODO el historico (precio real vs curva estacional)
+    corr={}; betas={}
+    if esp and seas:
+        for h in range(1,14):
+            num=den=0.0
+            for k in keys[52:]:
+                t=_wk(k[0],k[1],h)
+                if k in esp and t in esp:
+                    sk=seas.get(str(min(k[1],53))); st_=seas.get(str(min(t[1],53)))
+                    if not sk or not st_: continue
+                    pb=esp[k]*st_/sk; a=res(k); num+=a*(esp[t]-pb); den+=a*a
+            betas[h]=num/den if den else 0.0
+            corr[h]=round(betas[h]*r0,4)          # € /kg vivo
+    ctx={'ultimo':{'sem':f"{last[0]}-W{last[1]:02d}",'canal_kg':round(Wd[last],2),
+                   'vivo_kg':round(Vd[last],2) if last in Vd else round(Wd[last]/rend,1),'rendimiento':round(rend,3)},
+         'anomalia_vs_normal_kg':round(r0,2),
+         'vs_anio_anterior_kg':round(Wd[last]-Wd[ly],2) if ly in Wd else None,
+         'vs_media_5_anios_kg':round(Wd[last]-st.mean(m5),2) if m5 else None,
+         'cambio_4_semanas_kg':round(Wd[last]-Wd[prev4],2),
+         'prevision':[p for p in traj if p['h'] in (1,2,4,8,13,26)],
+         'traj':traj[:13],'serie':[{'y':k[0],'w':k[1],'canal':Wd[k]} for k in keys[-26:]],
+         'impacto_precio_cts':{str(h):round(corr[h]*100,1) for h in (4,8,13) if h in corr},
+         'persistencia_semanal':round(phi,3),'error_backtest_kg':PESO_ERR,
+         'metodo':'nivel 52 semanas + perfil estacional + anomalia que se disipa (phi^h). Backtest 2022-2026.'}
+    return {'ctx':ctx,'corr':corr}
+
 # ---------- 4b) CONGELAR TRAYECTORIA A MEDIO PLAZO (registro inmutable) ----------
-def paso_congelar(m):
+def paso_congelar(m,pm=None):
     # Guarda, UNA SOLA VEZ por semana objetivo y solo si es una prediccion A CIEGAS (emitida antes de que
     # empiece esa semana), la trayectoria completa a 26 semanas con horquilla. NUNCA se reescribe.
     # Esto es lo que permitira medir la precision a 1/4/6 meses cuando pase el tiempo (peticion de Francisco/Daniel).
@@ -538,22 +636,37 @@ def paso_congelar(m):
         for line in open(CONG_FILE):
             try: r=json.loads(line); existentes.add((r['target_y'],r['target_w'],r.get('model_version')))
             except Exception: pass
-    if (py,pw,MODEL_VERSION) in existentes:  # ya congelada esta semana con esta version
-        return
     pv=m['pred']; seas=m['seas']; sref=seas.get(str(pw)) or 100.0
     traj=[]
     for i in range(26):
-        fw=((pw-1+i)%52)+1; fy=py+((pw-1+i)//52)
-        sf=seas.get(str(fw)) or sref
+        fy,fw=_wk(py,pw,i)          # por FECHA real (antes %52: desplazaba 1 semana tras fin de año en años de 53 semanas)
+        sf=seas.get(str(min(fw,53))) or sref
         central=round(pv*(sf/sref),3)
         semi=BANDA_CAL[i] if i<len(BANDA_CAL) else BANDA_CAL[-1]   # banda CALIBRADA con el backtest real (P80)
         traj.append({'y':fy,'w':fw,'h':i,'central':central,'lo':round(central-semi,3),'hi':round(central+semi,3)})
-    rec={'forecast_id':f'{py}-W{pw:02d}-{MODEL_VERSION}','issued_at':hoy.isoformat(),
-         'model_version':MODEL_VERSION,'model_features':MODEL_FEATURES,
-         'target_y':py,'target_w':pw,'ultimo_real':m['last'],'trayectoria':traj}
+    recs=[]
+    if (py,pw,MODEL_VERSION) not in existentes:
+        recs.append({'forecast_id':f'{py}-W{pw:02d}-{MODEL_VERSION}','issued_at':hoy.isoformat(),
+                     'model_version':MODEL_VERSION,'model_features':MODEL_FEATURES,
+                     'target_y':py,'target_w':pw,'ultimo_real':m['last'],'trayectoria':traj})
+    # V2 EN PARALELO (protocolo de Daniel: mismas fechas, mismas condiciones). Solo semanas 2-13 desde el ultimo real:
+    # a 1 semana manda el modelo semanal (el peso no aporta ahi, probado) y a >13 semanas la correccion empeora.
+    if pm and pm.get('corr') and (py,pw,MODEL_V2) not in existentes:
+        t2=[]
+        for p in traj:
+            h=p['h']+1
+            # correccion plena 2-13 sem; de 14 a 19 se desvanece linealmente (sin escalon artificial); >=20 nada
+            k=pm['corr'].get(min(h,13),0.0); f=1.0 if 2<=h<=13 else (max(0.0,(20-h)/7.0) if h>13 else 0.0)
+            c=round(p['central']+k*f,3); s=p['central']-p['lo']
+            t2.append({**p,'central':c,'lo':round(c-s,3),'hi':round(c+s,3)})
+        recs.append({'forecast_id':f'{py}-W{pw:02d}-{MODEL_V2}','issued_at':hoy.isoformat(),
+                     'model_version':MODEL_V2,'model_features':MODEL_V2_FEATURES,
+                     'target_y':py,'target_w':pw,'ultimo_real':m['last'],'trayectoria':t2,
+                     'peso_anomalia_kg':(pm.get('ctx') or {}).get('anomalia_vs_normal_kg')})
     try:
-        with open(CONG_FILE,'a') as f: f.write(json.dumps(rec,ensure_ascii=False)+'\n')
-        print(f'  Prediccion CONGELADA: {rec["forecast_id"]} ({len(traj)} semanas, horizonte ~6 meses)')
+        with open(CONG_FILE,'a') as f:
+            for rec in recs: f.write(json.dumps(rec,ensure_ascii=False)+'\n')
+        for rec in recs: print(f'  Prediccion CONGELADA: {rec["forecast_id"]} ({len(rec["trayectoria"])} semanas)')
     except Exception as e:
         print('  (no se pudo congelar:',e,')')
 
@@ -617,7 +730,11 @@ def paso_web(m,historial,diario=None,contexto=None):
              'serie':m['serie'],'serie_paises':m['serie_paises'],'contrib':m['contrib'],'vecinos':m['vecinos'],
              'seas':m['seas'],'semaforo':sem,'escenarios':escenarios,'eventos':eventos,
              'contexto_mercado':(contexto or {}),
-             'medio_plazo':(lambda c: ({'actual':c[-1],'eval':eval_horizontes(c,m['esp']),'version':MODEL_VERSION,'n_congeladas':len(c)}) if c else {'actual':None,'eval':[],'version':MODEL_VERSION,'n_congeladas':0})(cargar_congeladas()),
+             'medio_plazo':(lambda c: (lambda v1,v2: {'actual':(v1[-1] if v1 else None),'actual_v2':(v2[-1] if v2 else None),
+                                     'eval':eval_horizontes(c,m['esp']),'version':MODEL_VERSION,'version_v2':MODEL_V2,
+                                     'n_congeladas':len(v1),'n_congeladas_v2':len(v2)})(
+                                     [r for r in c if r.get('model_version',MODEL_VERSION)==MODEL_VERSION],
+                                     [r for r in c if r.get('model_version')==MODEL_V2]))(cargar_congeladas()),
              'diario':(diario or {})}
     pw=os.environ.get('WEB_PASSWORD','cerdo')
     enc=cifrar(json.dumps(payload,ensure_ascii=False),pw)
@@ -629,8 +746,13 @@ if __name__=='__main__':
     print('== 2) Maestro =='); mae=paso_maestro() or {}
     print('== 3) Modelo =='); m=paso_modelo()
     print('== 4) Registro =='); h=paso_registro(m)
-    print('== 4b) Congelar medio plazo =='); paso_congelar(m)
-    print('== 4c) Contexto =='); ctx=paso_contexto()
+    print('== 4b) Contexto =='); ctx=paso_contexto()
+    pm=None
+    try:
+        pm=modelo_peso(cargar_series(),m['esp'],m['seas'])
+        if pm: ctx['peso_semanal']=pm['ctx']; print(f"  Peso canal: {pm['ctx']['ultimo']} | anomalia {pm['ctx']['anomalia_vs_normal_kg']} kg")
+    except Exception as e: print('  (predictor de peso no disponible:',e,')')
+    print('== 4c) Congelar medio plazo (V1 + V2-peso) =='); paso_congelar(m,pm)
     diario={'ts':datetime.datetime.now().strftime('%d/%m/%Y %H:%M'),
             'pdfs_nuevos':cor[0],'nombres':cor[1][:8],
             'nuevas':mae.get('nuevas',[]),'lat':mae.get('lat',{})}
