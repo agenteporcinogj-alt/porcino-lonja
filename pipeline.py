@@ -615,6 +615,13 @@ def modelo_peso(series,esp=None,seas=None):
          'traj':traj[:13],'serie':[{'y':k[0],'w':k[1],'canal':Wd[k]} for k in keys[-26:]],
          'impacto_precio_cts':{str(h):round(corr[h]*100,1) for h in (4,8,13) if h in corr},
          'persistencia_semanal':round(phi,3),'error_backtest_kg':PESO_ERR,
+         # LECTURA YA ESCRITA con el signo correcto (el bot llegó a invertirlo por la tendencia de subida otoñal)
+         'lectura':(lambda a,c4,ip: (f"Cerdos {format(abs(a),'.1f').replace('.',',')} kg MÁS {'LIGEROS' if a<0 else 'PESADOS'} de lo normal para esta semana "
+                    f"→ {'menos' if a<0 else 'más'} kilos de carne de lo habitual → {'APOYO al precio' if a<0 else 'PRESIÓN a la baja sobre el precio'}"
+                    + (f": {', '.join(('+' if v>0 else '')+format(v,'.1f').replace('.',',')+' cts a '+h+' sem' for h,v in ip.items())} respecto a la curva estacional" if ip else '')
+                    + f". Que el peso {'suba' if c4>0 else 'baje'} estas semanas es lo normal de la época y YA está en la curva estacional; lo que cuenta es la diferencia con lo normal.")
+                   )(r0,Wd[last]-Wd[prev4],{str(h):round(corr[h]*100,1) for h in (4,8,13) if h in corr}),
+         'sentido_efecto_precio':('al alza (apoyo)' if r0<0 else 'a la baja (presion)') if corr else None,
          'metodo':'nivel 52 semanas + perfil estacional + anomalia que se disipa (phi^h). Backtest 2022-2026.'}
     return {'ctx':ctx,'corr':corr}
 
