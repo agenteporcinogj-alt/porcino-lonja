@@ -61,9 +61,14 @@ def paso_correo():
         for part in msg.walk():
             if part.get_content_maintype()=='multipart': continue
             fn=part.get_filename()
-            if not fn or not fn.lower().endswith('.pdf'): continue
+            if not fn: continue
+            # DECODIFICAR ANTES de comprobar '.pdf': un nombre con acentos llega codificado (=?utf-8?B?...?=)
+            # y el texto crudo NO termina en '.pdf' -> antes se tiraban en silencio TODOS los informes con
+            # acento (Boletín, Exportación, Producción China, Actualización PPA...) aunque el correo quedaba "visto".
             parts=decode_header(fn); nm=''
             for txt,enc in parts: nm+= txt.decode(enc or 'utf-8','ignore') if isinstance(txt,bytes) else txt
+            if not (nm.lower().endswith('.pdf') or part.get_content_type()=='application/pdf'): continue
+            if not nm.lower().endswith('.pdf'): nm+='.pdf'
             nm=''.join(c for c in __import__('unicodedata').normalize('NFD',nm) if __import__('unicodedata').category(c)!='Mn')  # á->a, ó->o (antes acento->'_' rompia el router)
             nm=re.sub(r'[^A-Za-z0-9._\- ]','_',nm).strip() or 'adj.pdf'
             path=os.path.join(PDFS,nm)
@@ -245,9 +250,13 @@ def actualizar_series():
                 for mes,val in meses.items(): tgt['series'][str(ano)][str(mes)]=val
             tgt['anos']=sorted(set(tgt['anos'])); nuevos+=1
         else:
+            if not (r.get('titular') or r.get('resumen')): continue   # PDF-imagen (sin texto): no meter entradas vacias
+            if fam=='apertura_semana':   # la nota de los lunes: ordenar por su nº de semana (el titulo suele no traer año)
+                mw=re.search(r'semana\s*(\d{1,2})',fn,re.I)
+                if mw: r={**r,'periodo':f"{datetime.date.today().isocalendar()[0]}-W{int(mw.group(1)):02d}"}
             iso=EX.iso_de_nombre(fn) or {}; tl=series['narrativo'].setdefault(fam,[])
             if not any(x.get('archivo')==fn for x in tl):
-                tl.append({'fecha':iso.get('fecha',''),'archivo':fn,'titular':r.get('titular'),
+                tl.append({'fecha':iso.get('fecha','') or datetime.date.today().isoformat(),'archivo':fn,'titular':r.get('titular'),  # sin fecha en el nombre -> fecha de ingesta (desempate cronologico)
                            'resumen':r.get('resumen'),'periodo':r.get('periodo','')})
                 tl.sort(key=lambda x:(x.get('periodo') or '',x.get('fecha') or '',x.get('archivo') or '')); series['narrativo'][fam]=tl[-24:]; nuevos+=1
     series['generado']=datetime.datetime.now().isoformat()
@@ -317,7 +326,8 @@ def construir_contexto_rico(series, ppa_ctx=None, ppa_hist=None):
     # Fundamentales de fondo (titulares de los ultimos informes de cada tipo)
     fund={}
     etiq={'censo':'censo_porcino','china_import':'china_importacion','exportacion':'exportacion',
-          'usda':'previsiones_usda','fao':'previsiones_fao','importacion':'importacion','china_produccion':'china_produccion'}
+          'usda':'previsiones_usda','fao':'previsiones_fao','importacion':'importacion','china_produccion':'china_produccion',
+          'apertura_semana':'apertura_semana','otros_informes':'otros_informes'}
     for fam,nom in etiq.items():
         tl=sn.get(fam,[])
         if tl: fund[nom]={'titular':tl[-1].get('titular'),'resumen':tl[-1].get('resumen'),'fecha':tl[-1].get('fecha')}
