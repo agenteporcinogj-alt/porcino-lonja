@@ -263,6 +263,7 @@ def familia(fn):
     if 'usda' in base: return 'usda'
     if base.startswith('previsiones fao') or 'fao-ocde' in base or 'fao para' in base: return 'fao'
     if 'balance importaci' in base: return 'importacion'
+    if base.startswith('previsiones'): return 'previsiones_ue'   # 'Previsiones UE para 2026 (Otoño)' y similares
     if 'producci' in base and 'porcina' in base and 'china' in base: return 'china_produccion'
     if base.startswith('bolet'): return 'cereales'   # del Boletín sacamos los precios de cereales/piensos
     if 'censo' in base and 'porcin' in base: return 'censo'   # "Censos Porcinos de la UE" (plural) se escapaba
@@ -277,5 +278,5 @@ EXTRACTOR = {
     'matanza': ex_matanza, 'consumo': ex_consumo,
     'censo': ex_narrativo, 'china_import': ex_narrativo, 'exportacion': ex_narrativo,
     'usda': ex_narrativo, 'fao': ex_narrativo, 'importacion': ex_narrativo,
-    'china_produccion': ex_narrativo, 'apertura_semana': ex_narrativo, 'otros_informes': ex_narrativo,
+    'china_produccion': ex_narrativo, 'apertura_semana': ex_narrativo, 'otros_informes': ex_narrativo, 'previsiones_ue': ex_narrativo,
 }

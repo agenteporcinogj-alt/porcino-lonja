@@ -351,7 +351,7 @@ def construir_contexto_rico(series, ppa_ctx=None, ppa_hist=None):
     fund={}
     etiq={'censo':'censo_porcino','china_import':'china_importacion','exportacion':'exportacion',
           'usda':'previsiones_usda','fao':'previsiones_fao','importacion':'importacion','china_produccion':'china_produccion',
-          'apertura_semana':'apertura_semana','otros_informes':'otros_informes'}
+          'apertura_semana':'apertura_semana','otros_informes':'otros_informes','previsiones_ue':'previsiones_ue'}
     for fam,nom in etiq.items():
         tl=sn.get(fam,[])
         if tl: fund[nom]={'titular':tl[-1].get('titular'),'resumen':tl[-1].get('resumen'),'fecha':tl[-1].get('fecha')}
@@ -632,11 +632,13 @@ def paso_congelar(m,pm=None):
     # Esto es lo que permitira medir la precision a 1/4/6 meses cuando pase el tiempo (peticion de Francisco/Daniel).
     py,pw=m['nexty'],m['nextw']
     try:
-        lunes=datetime.date.fromisocalendar(py,pw,1)
+        jueves=datetime.date.fromisocalendar(py,pw,4)   # Mercolleida fija el Cerdo Blanco el JUEVES de la semana
     except Exception:
         return
     hoy=datetime.date.today()
-    if hoy>=lunes:  # la semana objetivo ya empezo/paso -> NO es prediccion a ciegas, no congelar
+    # A ciegas = emitida ANTES del jueves en que se publica ese precio. (Antes el corte era el lunes: si Daniel
+    # reenviaba con retraso -p.ej. tras vacaciones- se perdia la semana entera de registro V1 y V2.)
+    if hoy>=jueves:
         return
     existentes=set()
     if os.path.exists(CONG_FILE):
