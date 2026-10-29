@@ -714,11 +714,13 @@ def cifrar(plaintext,password):
     iv=os.urandom(12); ct=AESGCM(key).encrypt(iv,plaintext.encode(),None)
     return base64.b64encode(salt+iv+ct).decode()
 def es_backtest(r):
-    # Es backtest si la "predicción" se apuntó cuando la semana ya había empezado (no fue a ciegas).
+    # Es backtest si la prediccion se apunto el JUEVES de publicacion o despues (ya no era a ciegas).
+    # Antes el corte era el lunes: la sem44, apuntada el lunes 26 por un reenvio tardio, salia como
+    # backtest aunque se emitio 3 dias antes de que Mercolleida publicara ese precio.
     try:
-        mon=datetime.date.fromisocalendar(int(r['anio']),int(r['semana']),1)
+        jue=datetime.date.fromisocalendar(int(r['anio']),int(r['semana']),4)
         fp=datetime.date.fromisoformat(r['fecha_pred'])
-        return fp>=mon
+        return fp>=jue
     except Exception:
         return False
 def paso_web(m,historial,diario=None,contexto=None):
