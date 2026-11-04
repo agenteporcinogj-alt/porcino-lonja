@@ -227,15 +227,18 @@ def periodo_de_titulo(titular):
     Sirve para ordenar informes por fecha REAL del dato, no por nombre de fichero (que a veces no la lleva)."""
     if not titular: return ''
     n = _norm(titular)
-    my = re.search(r'\b(20\d{2})\b', n)
-    ano = my.group(1) if my else ''
-    # mes final del periodo (coge el ultimo mes citado)
-    mes = 0
+    # Fin del periodo = el AÑO MÁS ALTO citado y el ÚLTIMO mes citado (por posición en el texto).
+    # Antes se cogía el primer año y el mes de número más alto: 'OCTUBRE 2025 A MARZO 2026' salía
+    # '2025-10' en vez de '2026-03' y los informes de periodos que cruzan el año se ordenaban mal.
+    anos = re.findall(r'\b(20\d{2})\b', n)
+    if not anos:
+        return ''
+    ano = max(anos)
+    pos = []
     for nombre, num in MESES.items():
         for m in re.finditer(r'\b' + nombre + r'\b', n):
-            mes = max(mes, num)
-    if not ano:
-        return ''
+            pos.append((m.start(), num))
+    mes = max(pos)[1] if pos else 0
     return f'{ano}-{mes:02d}' if mes else f'{ano}-00'
 
 def ex_narrativo(t):
@@ -267,7 +270,7 @@ def familia(fn):
     if 'producci' in base and 'porcina' in base and 'china' in base: return 'china_produccion'
     if base.startswith('bolet'): return 'cereales'   # del Boletín sacamos los precios de cereales/piensos
     if 'censo' in base and 'porcin' in base: return 'censo'   # "Censos Porcinos de la UE" (plural) se escapaba
-    if 'como empezamos' in base: return 'apertura_semana'      # nota de los lunes de Mercolleida
+    if re.search(r'c.mo empezamos', base): return 'apertura_semana'   # nota de los lunes ('Cómo'/'Como'/'C_mo')
     if 'encuesta' in base or base.startswith('isn'): return 'otros_informes'
     if 'ppa' in base: return 'ppa'
     return None

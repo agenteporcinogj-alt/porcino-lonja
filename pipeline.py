@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # PIPELINE NUBE - Grupo Jorge / precio cerdo Lonja de Lleida
 # correo -> PDFs -> Excel maestro -> modelo -> prediccion -> registro -> web cifrada
-import os, re, csv, json, base64, datetime, statistics as st, glob, imaplib, email
+import os, re, csv, json, base64, datetime, statistics as st, glob, imaplib, email, email.utils
 from email.header import decode_header
 import pdfplumber, openpyxl
 import sys as _sys
@@ -48,20 +48,32 @@ def paso_correo():
     if os.path.exists(VISTOS):
         try: vistos=set(l.strip() for l in open(VISTOS) if l.strip())
         except: vistos=set()
+    # Opcional: lista de remitentes/dominios autorizados (p.ej. "daniel@x.com,@grupojorge.es"). Sin ella se acepta
+    # cualquier remitente, como antes. Con ella, un correo de otra dirección no mete PDFs (ni precios) en el sistema.
+    permitidos=[x.strip().lower() for x in os.environ.get('REMITENTES_PERMITIDOS','').split(',') if x.strip()]
+    def _permitido(de):
+        if not permitidos: return True
+        addr=email.utils.parseaddr(de or '')[1].lower()
+        return bool(addr) and any(addr==p_ or (p_.startswith('@') and addr.endswith(p_)) for p_ in permitidos)
     since=(datetime.date.today()-datetime.timedelta(days=12)).strftime('%d-%b-%Y')  # ventana acotada: el historico ya esta en master.xlsx
     M=imaplib.IMAP4_SSL('imap.gmail.com'); M.login(user,pw); M.select('INBOX')
     typ,data=M.search(None,f'(SINCE {since})'); ids=data[0].split()
     saved=0; nombres=[]; nuevos=[]; en_ventana=[]
     for i in ids:
         # 1) Solo la cabecera Message-ID (ligero, NO descarga adjuntos)
-        typ,hd=M.fetch(i,'(BODY.PEEK[HEADER.FIELDS (MESSAGE-ID)])')
-        mid=''
+        typ,hd=M.fetch(i,'(BODY.PEEK[HEADER.FIELDS (MESSAGE-ID FROM)])')
+        mid=''; de=''
         try:
-            if hd and hd[0] and hd[0][1]: mid=(email.message_from_bytes(hd[0][1]).get('Message-ID') or '').strip()
+            if hd and hd[0] and hd[0][1]:
+                h_=email.message_from_bytes(hd[0][1]); mid=(h_.get('Message-ID') or '').strip(); de=h_.get('From') or ''
         except: mid=''
         if mid: en_ventana.append(mid)
         if mid and mid in vistos:
             continue  # ya procesado antes -> no bajamos el mensaje completo
+        if not _permitido(de):
+            print('  (correo ignorado: remitente no autorizado)')
+            if mid: nuevos.append(mid)   # se marca visto para no volver a mirarlo
+            continue
         # 2) Mensaje nuevo: ahora si lo descargamos entero y sacamos los PDFs
         typ,md=M.fetch(i,'(RFC822)'); msg=email.message_from_bytes(md[0][1])
         for part in msg.walk():
@@ -77,9 +89,17 @@ def paso_correo():
             if not nm.lower().endswith('.pdf'): nm+='.pdf'
             nm=''.join(c for c in __import__('unicodedata').normalize('NFD',nm) if __import__('unicodedata').category(c)!='Mn')  # á->a, ó->o (antes acento->'_' rompia el router)
             nm=re.sub(r'[^A-Za-z0-9._\- ]','_',nm).strip() or 'adj.pdf'
+            datos=part.get_payload(decode=True)
+            if not datos: continue   # adjunto vacío: antes se guardaba un PDF de 0 bytes (o fallaba si era None)
             path=os.path.join(PDFS,nm)
-            if os.path.exists(path): continue
-            with open(path,'wb') as f: f.write(part.get_payload(decode=True)); saved+=1; nombres.append(nm)
+            # Mismo nombre en otro correo (p.ej. 'Boletin.pdf' de dos semanas): antes se descartaba el nuevo en
+            # silencio y el correo quedaba 'visto'. Si el contenido es idéntico se ignora; si no, se guarda con sufijo.
+            base_,ext_=os.path.splitext(nm); k=1
+            while os.path.exists(path):
+                if open(path,'rb').read()==datos: path=None; break
+                k+=1; nm=f'{base_}_{k}{ext_}'; path=os.path.join(PDFS,nm)
+            if path is None: continue
+            with open(path,'wb') as f: f.write(datos); saved+=1; nombres.append(nm)
         if mid: nuevos.append(mid)
     M.logout()
     # Guardar manifiesto: lo ya visto que sigue en ventana + lo nuevo (evita que crezca sin fin y que "olvide" lo de la ventana).
@@ -200,6 +220,14 @@ def ctx_ppa(t):
     mAc=re.search(r'(\d{2,4})\s+[\d.]+\s+\d+\s+NUEVO', t)
     acum=int(mAc.group(1)) if mAc else None
     apertura=bool(re.search(r'autoriza|reabre|reapertura|nuevo acuerdo', t, re.I))
+    if not (dom or com or sem is not None or nuevos is not None or acum is not None):
+        # Texto sin NINGUNA señal conocida = formato no reconocido. Antes salía sin_positivos_domestico=False
+        # y la web pintaba "¿En granjas? SÍ" (y el bot lo creía). Mejor decir que no hay dato.
+        resumen='No se ha podido leer el informe PPA de esta semana (formato no reconocido): revisar a mano. Sin dato fiable sobre granjas.'
+        if apertura: resumen+=' · OJO: el texto menciona una apertura/acuerdo de exportación'
+        return {'sin_positivos_domestico':None,'sin_cambios_comercio_exterior':None,
+                'semana_informe':None,'casos_nuevos_jabali':None,'acumulados_positivos':None,
+                'apertura_comercial':apertura,'resumen':resumen,'reconocido':False}
     resumen=('Solo focos en jabalíes, SIN positivos en cerdo doméstico y sin nuevos vetos (China/Japón no cierran por esto de momento)'
              if (dom and com) else 'Situación PPA con posibles cambios — revisar, puede afectar a vetos de exportación')
     if nuevos is not None: resumen=f'{nuevos} casos nuevos esta semana (solo jabalí). '+resumen
@@ -280,6 +308,8 @@ def actualizar_series():
         for kind,vals in rp.items():
             for bloque,(yy,ww) in (('act',(Y,Wk)),('ant',(pY,pW))):
                 for k,v in enumerate(vals[bloque]):
+                    try: datetime.date.fromisocalendar(yy-k,ww,1)
+                    except ValueError: continue   # p.ej. '2025-W53' no existe (2025 tiene 52 semanas): no inventar semanas
                     key=f"{yy-k}-W{ww:02d}"; rec=ps.setdefault(key,{})
                     if rec.get('src_'+kind,'')<=fecha.isoformat():   # el PO mas reciente manda (revisiones)
                         rec[kind]=v; rec['src_'+kind]=fecha.isoformat(); nuevos+=1
@@ -361,6 +391,14 @@ def construir_contexto_rico(series, ppa_ctx=None, ppa_hist=None):
     if ppa_hist: ctx['ppa_historico']=ppa_hist
     return ctx
 
+def _anio_informe(sem,fecha):
+    # Año al que pertenece un informe semanal con nº de semana 'sem' leído en 'fecha'
+    # (un informe de la semana 52 leído en enero es del año anterior, y uno de la semana 1 leído a final de diciembre, del siguiente).
+    y,w,_=fecha.isocalendar()
+    if sem>w+26: return y-1
+    if sem<w-26: return y+1
+    return y
+
 def paso_contexto():
     # 1) Actualiza las series con los PDFs nuevos del correo. 2) Procesa PPA (extractor dedicado).
     # 3) Construye el contexto rico para el chatbot/web. 4) Persiste contexto para trazabilidad.
@@ -371,6 +409,12 @@ def paso_contexto():
         except Exception: prev={}
     hoy=datetime.date.today().isoformat()
     ppa_ctx=prev.get('ppa'); ppa_hist=prev.get('ppa_historico',[])
+    # El nº de semana del informe se repite cada año: el histórico se indexa por (año, semana).
+    # Antes solo por semana -> desde enero los informes con un nº ya visto el año anterior no se apuntaban.
+    for h in ppa_hist:
+        if h.get('anio') is None and h.get('semana') is not None:
+            try: h['anio']=_anio_informe(h['semana'],datetime.date.fromisoformat(h.get('fecha') or hoy))
+            except Exception: pass
     try:
         # Elegir el informe PPA MÁS RECIENTE por nº de semana (no por orden alfabético del fichero,
         # que elegía mal si convivían "Actualización PPA..." y "Resumen semanal PPA...").
@@ -385,10 +429,11 @@ def paso_contexto():
         if pp:
                 ppa_ctx={**pp,'fecha':hoy}
                 sem=pp.get('semana_informe')
-                if sem is not None and not any(h.get('semana')==sem for h in ppa_hist):
-                    ppa_hist.append({'semana':sem,'fecha':hoy,'casos_nuevos':pp.get('casos_nuevos_jabali'),
+                anio=_anio_informe(sem,datetime.date.fromisoformat(hoy)) if sem is not None else None
+                if sem is not None and not any((h.get('anio'),h.get('semana'))==(anio,sem) for h in ppa_hist):
+                    ppa_hist.append({'anio':anio,'semana':sem,'fecha':hoy,'casos_nuevos':pp.get('casos_nuevos_jabali'),
                                      'acumulados':pp.get('acumulados_positivos'),'domestico':(0 if pp.get('sin_positivos_domestico') else 1)})
-                    ppa_hist=sorted(ppa_hist,key=lambda h:h.get('semana') or 0)[-60:]
+                ppa_hist=sorted(ppa_hist,key=lambda h:(h.get('anio') or 0,h.get('semana') or 0))[-60:]
     except Exception as e:
         print('  (PPA no disponible:',e,')')
     ctx=construir_contexto_rico(series,ppa_ctx,ppa_hist)
@@ -468,7 +513,10 @@ def fit(data):
     return solve(ATA,ATy)
 def paso_modelo():
     # Años dinámicos: de 2010 al año ACTUAL (antes clavado a 2026 -> se paraba en 2027).
-    wb=openpyxl.load_workbook(MASTER,data_only=True); years=list(range(2010,datetime.date.today().year+1))
+    # +1: la semana ISO 1 del año siguiente puede publicarse en diciembre (p.ej. 2026-W1 empieza el
+    # 29-dic-2025 y su jueves 1-ene es festivo). Si ese dato ya está en el maestro hay que usarlo; antes se
+    # ignoraba y se volvía a "predecir" -y a congelar como a ciegas- una semana ya publicada.
+    wb=openpyxl.load_workbook(MASTER,data_only=True); years=list(range(2010,datetime.date.today().year+2))
     def cell(sh,w,col):
         v=wb[sh].cell(8+w,col).value; return v if isinstance(v,(int,float)) else None
     seq=[]
@@ -651,7 +699,10 @@ def paso_congelar(m,pm=None):
         fy,fw=_wk(py,pw,i)          # por FECHA real (antes %52: desplazaba 1 semana tras fin de año en años de 53 semanas)
         sf=seas.get(str(min(fw,53))) or sref
         central=round(pv*(sf/sref),3)
-        semi=BANDA_CAL[i] if i<len(BANDA_CAL) else BANDA_CAL[-1]   # banda CALIBRADA con el backtest real (P80)
+        # banda CALIBRADA con el backtest real (P80). BANDA_CAL[k] = horizonte de k semanas desde el último
+        # real; el punto i de la trayectoria está a i+1 semanas (antes se usaba BANDA_CAL[i]: banda 0 en la
+        # semana objetivo y todas las demás una semana más estrechas de lo calibrado).
+        semi=BANDA_CAL[min(i+1,len(BANDA_CAL)-1)]
         traj.append({'y':fy,'w':fw,'h':i,'central':central,'lo':round(central-semi,3),'hi':round(central+semi,3)})
     recs=[]
     if (py,pw,MODEL_VERSION) not in existentes:
@@ -713,6 +764,13 @@ def cifrar(plaintext,password):
     key=kdf.derive(password.encode())
     iv=os.urandom(12); ct=AESGCM(key).encrypt(iv,plaintext.encode(),None)
     return base64.b64encode(salt+iv+ct).decode()
+def _ahora():
+    # Hora de Lleida para lo que se ENSEÑA (el runner de GitHub va en UTC: la web decía 13:05 cuando eran las 14:05).
+    try:
+        from zoneinfo import ZoneInfo
+        return datetime.datetime.now(ZoneInfo('Europe/Madrid'))
+    except Exception:
+        return datetime.datetime.now()
 def es_backtest(r):
     # Es backtest si la prediccion se apunto el JUEVES de publicacion o despues (ya no era a ciegas).
     # Antes el corte era el lunes: la sem44, apuntada el lunes 26 por un reenvio tardio, salia como
@@ -734,7 +792,7 @@ def paso_web(m,historial,diario=None,contexto=None):
       {'nombre':'Se agrava PPA / cierran mercados','valor':round(base-0.15,3),'txt':'Menos exportación, sobra carne → precio abajo. (~-15 cts, ilustrativo)'},
       {'nombre':'China reabre / sube demanda','valor':round(base+0.15,3),'txt':'Más demanda exterior → precio arriba. (~+15 cts, ilustrativo)'}]
     eventos=[{'fecha':'Nov 2025','titulo':'Densidades: el Supremo anuló la norma','txt':'El Tribunal Supremo (sentencia de 3-nov-2025, BOE 21-nov-2025) ANULÓ la exigencia de más espacio por cerdo del RD 159/2023, por un informe de impacto económico insuficiente. Se vuelve al estándar de 2002. Traducción para el mercado: NO hay recorte forzoso de cabaña → la oferta española no baja por esta vía, así que el escenario "menos cerdos → precio arriba" queda descartado. OJO: viene nueva normativa de bienestar (RD 809/2025) para 2026, así que no es la última palabra.'}]
-    payload={'generado':datetime.datetime.now().strftime('%d/%m/%Y %H:%M'),
+    payload={'generado':_ahora().strftime('%d/%m/%Y %H:%M'),
              'ultimo':m['last'],'prediccion':{'y':m['nexty'],'w':m['nextw'],'v':m['pred']},'delta_cts':delta,
              'precision':{'modelo_cts':round(m['mae_m']*100,1),'naive_cts':round(m['mae_n']*100,1),'within2':m['within2']},
              'historial':[{'semana':r['semana'],'anio':r.get('anio'),'pred':r['prediccion'],'real':r.get('real',''),'error':r.get('error_cts',''),'backtest':es_backtest(r)} for r in historial],
@@ -747,7 +805,12 @@ def paso_web(m,historial,diario=None,contexto=None):
                                      [r for r in c if r.get('model_version',MODEL_VERSION)==MODEL_VERSION],
                                      [r for r in c if r.get('model_version')==MODEL_V2]))(cargar_congeladas()),
              'diario':(diario or {})}
-    pw=os.environ.get('WEB_PASSWORD','cerdo')
+    # Sin contraseña NO se publica. Antes: os.environ.get('WEB_PASSWORD','cerdo') -> si el secreto falta en
+    # GitHub la variable llega VACÍA y se cifraba con '' (o con 'cerdo' si no existía): datos legibles por cualquiera.
+    pw=os.environ.get('WEB_PASSWORD') or ''
+    if not pw:
+        print('  AVISO: falta WEB_PASSWORD -> NO se actualiza docs/data.enc.js (no se publica sin contraseña).')
+        return
     enc=cifrar(json.dumps(payload,ensure_ascii=False),pw)
     open(ENC_OUT,'w').write('window.ENC="'+enc+'";')
     print(f'  Web cifrada actualizada ({len(enc)} bytes).')
@@ -764,7 +827,7 @@ if __name__=='__main__':
         if pm: ctx['peso_semanal']=pm['ctx']; print(f"  Peso canal: {pm['ctx']['ultimo']} | anomalia {pm['ctx']['anomalia_vs_normal_kg']} kg")
     except Exception as e: print('  (predictor de peso no disponible:',e,')')
     print('== 4c) Congelar medio plazo (V1 + V2-peso) =='); paso_congelar(m,pm)
-    diario={'ts':datetime.datetime.now().strftime('%d/%m/%Y %H:%M'),
+    diario={'ts':_ahora().strftime('%d/%m/%Y %H:%M'),
             'pdfs_nuevos':cor[0],'nombres':cor[1][:8],
             'nuevas':mae.get('nuevas',[]),'lat':mae.get('lat',{})}
     print('== 5) Web =='); paso_web(m,h,diario,ctx)

@@ -5,9 +5,16 @@ on:
   workflow_dispatch:
 permissions:
   contents: write
+# Una sola ejecución a la vez: sin esto, dos pasadas solapadas (cron cada 30 min, retrasos de GitHub o un
+# lanzamiento manual) se pisan en "Guardar resultados" (reset --hard + copiar): gana la última y se pierde
+# lo que añadió la otra (p.ej. una trayectoria congelada, que debería ser inmutable).
+concurrency:
+  group: pipeline-diario
+  cancel-in-progress: false
 jobs:
   run:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -19,6 +26,8 @@ jobs:
           GMAIL_USER: ${{ secrets.GMAIL_USER }}
           GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
           WEB_PASSWORD: ${{ secrets.WEB_PASSWORD }}
+          # Opcional (variable del repo, no secreto): remitentes/dominios cuyos PDFs se aceptan, p.ej. "@grupojorge.es"
+          REMITENTES_PERMITIDOS: ${{ vars.REMITENTES_PERMITIDOS }}
         run: python pipeline.py
       - name: Guardar resultados
         run: |

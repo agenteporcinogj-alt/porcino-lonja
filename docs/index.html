@@ -390,6 +390,10 @@ footer a{color:var(--accent);cursor:pointer}
 const $=id=>document.getElementById(id);
 const fmt=(v,d=2)=>Number(v).toLocaleString('es-ES',{minimumFractionDigits:d,maximumFractionDigits:d});
 const scts=v=>(v>0?'+':'')+fmt(v,1)+' cts';
+// Escapa texto que viene de fuera (PDFs, respuesta de la IA, lo que escribe el usuario) antes de meterlo en innerHTML.
+const escHtml=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+// Color que viene de la IA: solo #hex o var(--x) (nada de 'red"><img ...').
+const okCol=c=>(typeof c==='string'&&/^(#[0-9a-fA-F]{3,8}|var\(--[a-z0-9-]+\))$/.test(c))?c:null;
 const MES=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
 
 async function decryptData(b64,password){
@@ -401,8 +405,9 @@ async function decryptData(b64,password){
 }
 // ISO week -> lunes..domingo
 function weekRange(y,w){
-  const d=new Date(Date.UTC(y,0,1+(w-1)*7));const dow=d.getUTCDay();
-  if(dow<=4)d.setUTCDate(d.getUTCDate()-((dow+6)%7));else d.setUTCDate(d.getUTCDate()+(8-dow));
+  // lunes de la semana ISO w: lunes de la semana del 4-ene + 7*(w-1). (Antes, si el 1-ene caía en
+  // DOMINGO -2023, 2034...- se iba al lunes anterior y todo el año salía desplazado una semana.)
+  const d=new Date(Date.UTC(y,0,4));d.setUTCDate(d.getUTCDate()-((d.getUTCDay()+6)%7)+7*(w-1));
   const end=new Date(d);end.setUTCDate(d.getUTCDate()+6);
   const f=x=>x.getUTCDate()+' '+MES[x.getUTCMonth()];
   return f(d)+'–'+f(end);
@@ -502,12 +507,12 @@ function renderFundamentales(d){
   if(p){
     const dom=p.sin_positivos_domestico;
     let inner=row('Casos nuevos (jabalí)',p.casos_nuevos_jabali!=null?p.casos_nuevos_jabali:'—');
-    inner+=row('¿En granjas?','<span style="color:'+(dom?'var(--good)':'var(--bad)')+'">'+(dom?'NO ✓':'SÍ ⚠️')+'</span>');
-    cards.push(card('🦠 Peste Porcina Africana',inner,p.resumen||''));
+    inner+=row('¿En granjas?',dom==null?'<span style="color:var(--amber)">¿? (sin dato)</span>':'<span style="color:'+(dom?'var(--good)':'var(--bad)')+'">'+(dom?'NO ✓':'SÍ ⚠️')+'</span>');
+    cards.push(card('🦠 Peste Porcina Africana',inner,escHtml(p.resumen||'')));
   }
   const f=cm.fundamentales;
   if(f){
-    let inner=''; const add=(k,lbl)=>{if(f[k]&&f[k].titular)inner+='<div class="fnews"><b>'+lbl+':</b> '+f[k].titular+'</div>';};
+    let inner=''; const add=(k,lbl)=>{if(f[k]&&f[k].titular)inner+='<div class="fnews"><b>'+lbl+':</b> '+escHtml(f[k].titular)+'</div>';};
     add('china_importacion','China importación');add('china_produccion','China producción');add('exportacion','Exportación España');add('previsiones_usda','USDA');
     cards.push(card('🌍 Fondo — último informe',inner,'Lo que mueve la exportación y la oferta a medio plazo.'));
   }
@@ -559,7 +564,7 @@ function renderMedioPlazo(d){
     const TD='style="padding:3px 8px;border-bottom:1px solid var(--line)"';
     let h='<h3 style="margin:10px 0 4px">Precisión real a medio plazo</h3><table style="border-collapse:collapse;width:100%;font-size:13px"><thead><tr>'
       +['Modelo','Horizonte','Error medio','Dentro de banda','Semanas'].map(c=>'<th '+TD+';text-align:left;color:var(--muted)">'+c+'</th>').join('')+'</tr></thead><tbody>';
-    ev.forEach(r=>{h+='<tr><td '+TD+'>'+(r.version==='v1'?'V1':'V2 peso')+'</td><td '+TD+'>'+(r.horizonte_sem===0?'esta semana':r.horizonte_sem+' sem')+'</td><td '+TD+'><b>'+fmt(r.mae_cts,1)+' cts</b></td><td '+TD+'>'+r.cobertura_pct+'%</td><td '+TD+'>'+r.n+'</td></tr>';});
+    ev.forEach(r=>{h+='<tr><td '+TD+'>'+(r.version==='v1'?'V1':'V2 peso')+'</td><td '+TD+'>'+('a '+(r.horizonte_sem+1)+' sem')+'</td><td '+TD+'><b>'+fmt(r.mae_cts,1)+' cts</b></td><td '+TD+'>'+r.cobertura_pct+'%</td><td '+TD+'>'+r.n+'</td></tr>';});
     h+='</tbody></table>';
     $('mp-eval').innerHTML=h;
   }else{
@@ -651,7 +656,7 @@ function renderDiario(d){
   const nuevasTxt=nuevas.map(x=>Array.isArray(x)?x[1]:x).join(', ');  // nuevas pueden ser [año,semana] -> mostramos la semana
   rows+='<div class="drow"><span class="dk">🆕 Semanas nuevas al modelo</span><span class="dv">'+(nuevas.length?('sem '+nuevasTxt):'ninguna')+'</span></div>';
   if(lat.sem!=null){
-    const filas=[['🐷 Cerdo cebado (Lleida)',lat.cebado],['🇫🇷 Francia',lat.fra],['🇩🇪 Alemania',lat.ale]]
+    const filas=[['🐷 Cerdo cebado (Lleida, vivo)',lat.cebado],['🇫🇷 Francia (canal)',lat.fra],['🇩🇪 Alemania (canal)',lat.ale]]
       .map(([n,v])=>[n,price(v)]).filter(([n,v])=>v);
     if(filas.length){
       rows+='<div class="dsep">Precios leídos en el informe (semana '+lat.sem+'):</div>';
@@ -895,7 +900,7 @@ function buildEstado(){
     if(typeof D==='undefined'||!D)return {};
     const now=new Date();
     return {
-      hoy: now.toISOString().slice(0,10),
+      hoy: now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0')+'-'+String(now.getDate()).padStart(2,'0'),
       semana_actual: isoWeek(now),
       ultimo_real:{semana:D.ultimo.w,anio:D.ultimo.y,precio:D.ultimo.v},
       prediccion:{semana:D.prediccion.w,anio:D.prediccion.y,precio:D.prediccion.v,dias:weekRange(D.prediccion.y,D.prediccion.w)},
@@ -916,7 +921,10 @@ function buildEstado(){
           const pv=D.prediccion.v,pw=D.prediccion.w,py=D.prediccion.y,seas=D.seas||{};  // ANCLADA a la prediccion real del modelo
           const sref=seas[String(pw)]||100;const et=[],ce=[],lo=[],hi=[];
           for(let i=0;i<52;i++){                           // i=0 = la semana predicha (arranca EXACTO en la prediccion)
-            const fw=((pw-1+i)%52)+1,fy=py+Math.floor((pw-1+i)/52);
+            // semana pw+i por FECHA (antes %52: en 2026, de 53 semanas, la s53 desaparecía y todo se desplazaba)
+            const ju=new Date(Date.UTC(py,0,4));ju.setUTCDate(ju.getUTCDate()-((ju.getUTCDay()+6)%7)+7*(pw-1+i)+3);   // jueves de esa semana
+            const fy=ju.getUTCFullYear(),e4=new Date(Date.UTC(fy,0,4)),lun1=Date.UTC(fy,0,4-((e4.getUTCDay()+6)%7));
+            const fw=1+Math.floor((ju-lun1)/(7*864e5));
             const sf=seas[String(fw)]||sref;const central=pv*(sf/sref);
             const w=(1.2+1.4*Math.sqrt(i))/100; // semiancho €, crece con el horizonte
             et.push('s'+fw+'/'+String(fy).slice(2));
@@ -1083,15 +1091,15 @@ function chatChart(spec){
   const {type,labels,series,lo,hi,N,W,H,mL,mR,mT,mB,X,Y}=G;
   const pal=['var(--accent)','#5b8def','#e0b23b','#3fae6b','#a855f7'];const title=String(spec.title||'');
   let g='';for(let k=0;k<=3;k++){const v=lo+(hi-lo)*k/3,y=Y(v);g+='<line x1="'+mL+'" y1="'+y.toFixed(1)+'" x2="'+(W-mR)+'" y2="'+y.toFixed(1)+'" stroke="var(--line)"/><text x="'+(mL-5)+'" y="'+(y+3).toFixed(1)+'" text-anchor="end" font-size="8.5" fill="var(--muted)">'+ccFmt(v)+'</text>';}
-  const step=Math.max(1,Math.ceil(N/6));let xl='';for(let i=0;i<N;i++){if(i%step===0&&labels[i])xl+='<text x="'+X(i).toFixed(1)+'" y="'+(H-6)+'" text-anchor="middle" font-size="8" fill="var(--muted)">'+labels[i]+'</text>';}
+  const step=Math.max(1,Math.ceil(N/6));let xl='';for(let i=0;i<N;i++){if(i%step===0&&labels[i])xl+='<text x="'+X(i).toFixed(1)+'" y="'+(H-6)+'" text-anchor="middle" font-size="8" fill="var(--muted)">'+escHtml(labels[i])+'</text>';}
   let body='';
   if(type==='bar'){
     const s=series[0],bw=Math.min(38,(W-mL-mR)/Math.max(1,s.data.length)*0.6);
     s.data.forEach((v,i)=>{if(typeof v!=='number')return;const x=X(i),y=Y(v),y0=Y(Math.max(lo,0));body+='<rect x="'+(x-bw/2).toFixed(1)+'" y="'+Math.min(y,y0).toFixed(1)+'" width="'+bw.toFixed(1)+'" height="'+Math.abs(y0-y).toFixed(1)+'" rx="3" fill="'+pal[0]+'"/>';});
   }else{
-    series.forEach((s,si)=>{const c=s.color&&/^#|var\(/.test(s.color)?s.color:pal[si%pal.length];let p='',st=false;s.data.forEach((v,i)=>{if(typeof v!=='number'||!isFinite(v))return;p+=(st?'L':'M')+X(i).toFixed(1)+' '+Y(v).toFixed(1);st=true;});body+='<path d="'+p+'" fill="none" stroke="'+c+'" stroke-width="'+(si===0?2.4:1.5)+'" opacity="'+(si===0?1:.78)+'" stroke-linejoin="round"/>';const li=s.data.map((v,i)=>[v,i]).filter(a=>typeof a[0]==='number');if(li.length){const last=li[li.length-1];body+='<circle cx="'+X(last[1]).toFixed(1)+'" cy="'+Y(last[0]).toFixed(1)+'" r="3" fill="'+c+'"/>';}});
+    series.forEach((s,si)=>{const c=okCol(s.color)||pal[si%pal.length];let p='',st=false;s.data.forEach((v,i)=>{if(typeof v!=='number'||!isFinite(v))return;p+=(st?'L':'M')+X(i).toFixed(1)+' '+Y(v).toFixed(1);st=true;});body+='<path d="'+p+'" fill="none" stroke="'+c+'" stroke-width="'+(si===0?2.4:1.5)+'" opacity="'+(si===0?1:.78)+'" stroke-linejoin="round"/>';const li=s.data.map((v,i)=>[v,i]).filter(a=>typeof a[0]==='number');if(li.length){const last=li[li.length-1];body+='<circle cx="'+X(last[1]).toFixed(1)+'" cy="'+Y(last[0]).toFixed(1)+'" r="3" fill="'+c+'"/>';}});
   }
-  const leg=(series.length>1)?'<div class="cleg">'+series.map((s,si)=>'<span><i style="background:'+(s.color||pal[si%pal.length])+'"></i>'+String(s.name||('S'+(si+1)))+'</span>').join('')+'</div>':'';
+  const leg=(series.length>1)?'<div class="cleg">'+series.map((s,si)=>'<span><i style="background:'+(okCol(s.color)||pal[si%pal.length])+'"></i>'+escHtml(s.name||('S'+(si+1)))+'</span>').join('')+'</div>':'';
   const inter='<line class="cc-cr" x1="0" y1="'+mT+'" x2="0" y2="'+(H-mB)+'" stroke="var(--ink)" stroke-width="1" opacity="0"/><rect class="cc-cov" x="'+mL+'" y="'+mT+'" width="'+(W-mL-mR)+'" height="'+(H-mT-mB)+'" fill="transparent"/>';
   return (title?'<div class="cct">'+mdToHtml(title)+'</div>':'')+'<svg viewBox="0 0 '+W+' '+H+'">'+g+xl+body+inter+'</svg>'+leg+'<div class="cc-tip"></div>';
 }
@@ -1102,8 +1110,8 @@ function wireChatChart(box,spec){
     const move=ev=>{const r=cov.getBoundingClientRect();if(!r.width)return;const bx=box.getBoundingClientRect();const p=ev.touches?ev.touches[0]:ev;
       let k=Math.round((p.clientX-r.left)/r.width*(N-1));k=Math.max(0,Math.min(N-1,k));
       const x=X(k);cr.setAttribute('x1',x);cr.setAttribute('x2',x);cr.setAttribute('opacity',.35);
-      let html='<b>'+(labels[k]||('#'+(k+1)))+'</b>';
-      series.forEach((s,si)=>{const v=s.data[k];if(typeof v==='number'&&isFinite(v))html+='<br>'+(series.length>1?(String(s.name||('S'+(si+1)))+': '):'')+'<b>'+ccFmt(v)+'</b>';});
+      let html='<b>'+escHtml(labels[k]||('#'+(k+1)))+'</b>';
+      series.forEach((s,si)=>{const v=s.data[k];if(typeof v==='number'&&isFinite(v))html+='<br>'+(series.length>1?(escHtml(s.name||('S'+(si+1)))+': '):'')+'<b>'+ccFmt(v)+'</b>';});
       tip.innerHTML=html;tip.style.opacity=1;
       tip.style.left=Math.max(4,(r.right-bx.left)-150)+'px';tip.style.top='2px';};   // fijo arriba-derecha, no baila
     cov.addEventListener('mousemove',move);cov.addEventListener('mouseleave',()=>{cr.setAttribute('opacity',0);tip.style.opacity=0;});
@@ -1241,7 +1249,7 @@ async function ask(text){
   text=(text||'').trim();if(!text||sending)return;   // evita doble envío
   sending=true;$('csend').disabled=true;
   try{
-    addBub(text,'me');$('cin').value='';pushLog('user',text);
+    addBub(escHtml(text),'me');$('cin').value='';pushLog('user',text);
     const t=showTyping();
     // 1) local rápido: solo saludos/gracias muy claros → gratis e instantáneo
     let best={id:null,s:-1};try{best=await routeScored(text);}catch(e){}

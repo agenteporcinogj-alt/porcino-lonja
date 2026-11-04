@@ -2,14 +2,28 @@
 // Secretos: ANTHROPIC_API_KEY, ADMIN_KEY. Binding KV: LOG (registro de preguntas).
 // POST → chat + guarda pregunta y respuesta.  GET ?ver=1&key=ADMIN_KEY → página con el historial.
 
+// Límites de tamaño. La web manda EXTRA_INSTR (~16.300 caracteres) + nota de gráfica y un estado de ~19.000.
+// Antes 'extra' se cortaba a 4.000 (el modelo no veía el 75% de las instrucciones) y 'estado' no tenía tope
+// (cualquiera podía mandar megas de texto y pagarlos como tokens de entrada).
+const MAX_EXTRA = 24000;
+const MAX_ESTADO = 100000;
+
+// CORS: por defecto abierto ('*', como siempre). Si se define la variable ORIGENES_PERMITIDOS
+// ("https://usuario.github.io,https://otro"), solo esas webs pueden usar el Worker desde el navegador.
+function corsPara(request, env) {
+  const base = { 'Access-Control-Allow-Methods': 'POST, GET, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type' };
+  const lista = String(env.ORIGENES_PERMITIDOS || '').split(',').map(s => s.trim()).filter(Boolean);
+  if (!lista.length) return { cors: { ...base, 'Access-Control-Allow-Origin': '*' }, vetado: false };
+  const origin = request.headers.get('Origin') || '';
+  const ok = lista.includes(origin);
+  return { cors: { ...base, 'Access-Control-Allow-Origin': ok ? origin : lista[0], 'Vary': 'Origin' }, vetado: !!origin && !ok };
+}
+
 export default {
   async fetch(request, env) {
-    const cors = {
-      'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Methods': 'POST, GET, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type',
-    };
+    const { cors, vetado } = corsPara(request, env);
     if (request.method === 'OPTIONS') return new Response(null, { headers: cors });
+    if (vetado && request.method === 'POST') return json({ error: 'origen no permitido' }, 403, cors);
     if (request.method === 'GET') {
       const url = new URL(request.url);
       if (url.searchParams.has('ver')) return verLog(url, env, cors);
@@ -24,7 +38,9 @@ export default {
     if (body.tipo === 'visita') { await registrarVisita(env, request, body.usuario); return json({ ok: true }, 200, cors); }
 
     const estado = body.estado || {};
-    const extra = String(body.extra || '').slice(0, 4000);
+    const estadoTxt = JSON.stringify(estado);
+    if (estadoTxt.length > MAX_ESTADO) return json({ error: 'estado demasiado grande' }, 413, cors);
+    const extra = String(body.extra || '').slice(0, MAX_EXTRA);
     const usuario = String(body.usuario || 'visitante').slice(0, 40);
     const MODELOS = { haiku: 'claude-haiku-4-5-20251001', sonnet: 'claude-sonnet-5', opus: 'claude-opus-5-5' };
     const modelo = MODELOS[String(body.modelo || '').toLowerCase()] || 'claude-sonnet-5';
@@ -77,8 +93,15 @@ Impacto para el negocio: 1 céntimo/kg ≈ 66.000 €/semana ≈ 3,3 M€/año (
 Responde en español. Ajusta la longitud a la pregunta: breve si es simple, y si te piden "desarrolla/amplía/explica más" extiéndete y estructura con guiones. No prometas certezas: es una predicción, y dilo cuando toque.`;
 
     const system = CORE
-      + `\n\nESTADO ACTUAL (datos reales del modelo, úsalos tal cual):\n` + JSON.stringify(estado)
+      + `\n\nESTADO ACTUAL (datos reales del modelo, úsalos tal cual):\n` + estadoTxt
       + (extra ? `\n\n` + extra : ``);
+
+    // TOPE DE GASTO (propuesta): si se define MAX_CONSULTAS_DIA, a partir de esa cifra el Worker deja de llamar a la API ese día.
+    if (!(await dentroDelTope(env))) {
+      const aviso = 'Hoy se ha alcanzado el tope de consultas del asistente. Mañana vuelve a estar disponible 🐷';
+      await registrar(env, usuario, pregunta, '[tope diario alcanzado]');
+      return json({ respuesta: aviso }, 200, cors);
+    }
 
     let respuesta;
     try {
@@ -96,6 +119,18 @@ Responde en español. Ajusta la longitud a la pregunta: breve si es simple, y si
     return json({ respuesta }, 200, cors);
   },
 };
+
+// Contador diario aproximado en el KV (KV es "eventualmente consistente": con muchas peticiones simultáneas
+// puede pasarse un poco; para un tope estricto, usar además el límite de gasto de la consola de Anthropic).
+async function dentroDelTope(env) {
+  const max = Number(env.MAX_CONSULTAS_DIA || 0);
+  if (!max || !env.LOG) return true;                       // sin configurar = sin tope (comportamiento actual)
+  const k = 'gasto:' + new Date().toISOString().slice(0, 10);
+  const n = Number((await env.LOG.get(k)) || 0);
+  if (n >= max) return false;
+  await env.LOG.put(k, String(n + 1), { expirationTtl: 60 * 60 * 48 });
+  return true;
+}
 
 // Guarda la pregunta y respuesta en el KV (todo en metadata para listarlo de una).
 async function registrar(env, usuario, pregunta, respuesta) {
@@ -153,8 +188,9 @@ async function verLog(url, env, cors) {
   if (!env.ADMIN_KEY || key !== env.ADMIN_KEY)
     return new Response('No autorizado. Usa ?ver=1&key=TU_ADMIN_KEY', { status: 401, headers: cors });
   if (!env.LOG) return htmlResp('<h1>🐷 Panel</h1><p>Falta el KV (LOG).</p>', cors);
-  const list = await env.LOG.list({ limit: 1000 });
-  const all = list.keys.filter(k => k.metadata && k.metadata.t);
+  // KV.list devuelve como mucho 1000 claves por llamada y en orden alfabético ('q:' antes que 'v:'): antes,
+  // con más de 1000 preguntas, el panel enseñaba solo las 1000 más antiguas y ninguna visita. Ahora se pagina.
+  const all = [...await listarTodo(env.LOG, 'v:'), ...await listarTodo(env.LOG, 'q:')].filter(k => k.metadata && k.metadata.t);
   const visitas = all.filter(k => k.name.startsWith('v:')).sort((a, b) => (a.metadata.t < b.metadata.t ? 1 : -1));
   const preguntas = all.filter(k => k.name.startsWith('q:')).sort((a, b) => (a.metadata.t < b.metadata.t ? 1 : -1));
   const distintos = new Set(visitas.map(k => (k.metadata.ip || k.metadata.iphash || '') + '|' + (k.metadata.disp || '')));
@@ -181,6 +217,14 @@ async function verLog(url, env, cors) {
   });
   h += '</table>';
   return htmlResp(h, cors);
+}
+async function listarTodo(LOG, prefix, max = 20000) {
+  const out = []; let cursor;
+  do {
+    const r = await LOG.list({ prefix, limit: 1000, cursor });
+    out.push(...r.keys); cursor = r.list_complete ? undefined : r.cursor;
+  } while (cursor && out.length < max);
+  return out;
 }
 function htmlResp(inner, cors) {
   const css = 'body{font-family:system-ui,Arial;background:#141414;color:#eee;margin:0;padding:16px}h1{font-size:1.15rem}h2{font-size:.98rem;color:#e0a35b;margin:22px 0 8px}table{border-collapse:collapse;width:100%;font-size:.86rem;margin-bottom:10px}td,th{border-bottom:1px solid #333;padding:8px;text-align:left;vertical-align:top}th{color:#999;font-weight:600}.u{color:#5b8def;font-weight:600;white-space:nowrap}.t{color:#888;white-space:nowrap;font-size:.76rem}.r{color:#bbb;max-width:420px}';
