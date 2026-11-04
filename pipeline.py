@@ -539,15 +539,29 @@ def paso_modelo():
     rows=[]
     for t in range(4,len(seq)):
         c,p1,p2,p3,p4=seq[t],seq[t-1],seq[t-2],seq[t-3],seq[t-4]
-        rows.append({'y':c['y'],'w':c['w'],'prev':p1['e'],'dESP':c['e']-p1['e'],'target':c['e'],
+        rows.append({'y':c['y'],'w':c['w'],'pw':p1['w'],'prev':p1['e'],'dESP':c['e']-p1['e'],'target':c['e'],
             'x':[1.0,p1['e']-p2['e'],p2['e']-p3['e'],p3['e']-p4['e'],(p1['f']-p2['f']) if p1['f'] and p2['f'] else 0.0,
                  (p1['a']-p2['a']) if p1['a'] and p2['a'] else 0.0,(seas.get(c['w'],100.0)-seas.get(p1['w'],100.0))/100.0*allmean]})
+    # BACKTEST HONESTO: en cada semana pasada la estacionalidad se recalcula SOLO con los precios anteriores
+    # a esa semana. Antes se usaba la curva estacional de toda la muestra (incluido el futuro) y el error
+    # salia ~0,71 cts en vez de ~0,95 (lo detecto la auditoria de la nube, reproducido en local).
+    def _seas_hasta(lim):
+        pts=[(k,v) for k,v in esp.items() if k<lim]; am=st.mean(v for _,v in pts); s2={}
+        for w in range(1,54):
+            vals=[v for (yy,ww),v in pts if ww==w]
+            if len(vals)>=5: s2[w]=st.mean(vals)/am*100
+        for w in range(1,54):
+            if w not in s2: s2[w]=s2.get(w-1) or s2.get(w+1) or 100.0
+        return s2,am
     em=[];en=[];within=0;nb=0
     for d in rows:
         if d['y']<2019: continue
-        tr=[r for r in rows if (r['y']*100+r['w'])<(d['y']*100+d['w'])]
+        key=(d['y'],d['w'])
+        tr=[r for r in rows if (r['y'],r['w'])<key]
         if len(tr)<60: continue
-        b=fit(tr); pr=d['prev']+sum(bi*xi for bi,xi in zip(b,d['x']))
+        so,am=_seas_hasta(key)
+        fx=lambda r: r['x'][:6]+[(so.get(r['w'],100.0)-so.get(r['pw'],100.0))/100.0*am]
+        b=fit([{**r,'x':fx(r)} for r in tr]); pr=d['prev']+sum(bi*xi for bi,xi in zip(b,fx(d)))
         em.append(abs(pr-d['target'])); en.append(abs(d['prev']-d['target']))
         if abs(pr-d['target'])<=0.02: within+=1
         nb+=1

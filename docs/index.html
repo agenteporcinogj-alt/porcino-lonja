@@ -438,11 +438,11 @@ function render(d){
       const mae=errs.reduce((a,b)=>a+b,0)/errs.length;
       $('prec').textContent=fmt(mae,1);
       $('fiab-tag').textContent='EN VIVO';$('fiab-tag').style.color='var(--good)';
-      $('fiab-sub').innerHTML='error medio en <b>'+errs.length+' semana'+(errs.length>1?'s':'')+' REAL'+(errs.length>1?'ES':'')+'</b> (validada'+(errs.length>1?'s':'')+' contra Mercolleida). En simulación de 17 años: '+fmt(d.precision.modelo_cts,1)+' cts.';
+      $('fiab-sub').innerHTML='error medio en <b>'+errs.length+' semana'+(errs.length>1?'s':'')+' REAL'+(errs.length>1?'ES':'')+'</b> (validada'+(errs.length>1?'s':'')+' contra Mercolleida). En simulación desde 2019: '+fmt(d.precision.modelo_cts,1)+' cts.';
     }else{
       $('prec').textContent=fmt(d.precision.modelo_cts,1);
       $('fiab-tag').textContent='backtest';
-      $('fiab-sub').innerHTML='error medio en <b>17 años de simulación</b> (acierta ≤2 cts el '+d.precision.within2+'%) · <b>aún sin validar en vivo</b>';
+      $('fiab-sub').innerHTML='error medio en <b>simulación desde 2019</b> (acierta ≤2 cts el '+d.precision.within2+'%) · <b>aún sin validar en vivo</b>';
     }
   })();
   renderWhy(d);renderEsc(d);renderEvt(d);renderHist(d);renderDemanda();renderFundamentales(d);renderPeso(d);renderMedioPlazo(d);drawChart(d.serie);drawComov(d.serie_paises);
@@ -1001,7 +1001,7 @@ y en el texto explicas el resultado ("unos 211.000 €").
 == FIABILIDAD (muy importante, cero humo) ==
 Cuando hables de lo fiable que es el modelo, distingue SIEMPRE dos cosas y prioriza la de EN VIVO:
 - EN VIVO (lo real): usa ESTADO.precision_en_vivo → "error medio de X cts en N semanas reales validadas contra Mercolleida". Si N es pequeño (1-2), dilo: "es pronto, pocas semanas".
-- Backtest (simulación de 17 años): ESTADO.precision.modelo_cts (~0,7 cts). Es un ensayo sobre el pasado, NO rendimiento real. Cítalo solo como contexto, nunca como "lo que acierta de verdad".
+- Backtest (simulación honesta desde 2019, reentrenando cada semana solo con el pasado): ESTADO.precision.modelo_cts (~0,95 cts; antes se publicaba 0,7 porque el cálculo miraba sin querer al futuro, ya corregido). Es un ensayo sobre el pasado, NO rendimiento real. Cítalo solo como contexto, nunca como "lo que acierta de verdad".
 Nunca mezcles los dos como si fueran lo mismo.
 
 == HORIZONTES: sé honesto con la precisión según cuánto tiempo vista ==
